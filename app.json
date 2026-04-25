@@ -14,11 +14,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mahjongrelax.app"
+      "bundleIdentifier": "com.mahjongrelax.app",
+      "jsEngine": "hermes"
     },
     "android": {
       "package": "com.mahjongrelax.app",
       "versionCode": 1,
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "backgroundColor": "#0A0F1E"
       }

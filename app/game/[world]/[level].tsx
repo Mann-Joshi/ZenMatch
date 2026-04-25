@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -79,10 +80,12 @@ function ComboToast({
   visible,
   text,
   accentColor,
+  nonce,
 }: {
   visible: boolean;
   text: string;
   accentColor: string;
+  nonce: number;
 }) {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -91,11 +94,14 @@ function ComboToast({
     if (!visible) {
       return;
     }
+    cancelAnimation(translateY);
+    cancelAnimation(opacity);
+    
     translateY.value = 0;
     opacity.value = 1;
     translateY.value = withTiming(-70, { duration: 900, easing: Easing.out(Easing.quad) });
     opacity.value = withSequence(withTiming(1, { duration: 80 }), withDelay(600, withTiming(0, { duration: 320 })));
-  }, [visible, text, opacity, translateY]);
+  }, [visible, text, nonce, opacity, translateY]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -118,12 +124,15 @@ const comboToastStyles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   text: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '700',
     letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
 });
 
@@ -262,6 +271,8 @@ export default function GameScreen() {
     };
   }, [worldTheme.music]);
 
+  const toastTimeoutRef = useRef<NodeJS.Timeout>();
+
   // Combo toast trigger
   useEffect(() => {
     if (comboCount >= 2 && comboCount > prevComboRef.current) {
@@ -270,7 +281,11 @@ export default function GameScreen() {
       setComboToastText(`+${points} 🔥${multiplierLabel}x`);
       setComboToastKey((k) => k + 1);
       setComboToastVisible(true);
-      setTimeout(() => setComboToastVisible(false), 1100);
+      
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => {
+        setComboToastVisible(false);
+      }, 1100);
 
       if (comboCount >= 3) {
         edgeGlow.value = withSequence(
@@ -368,7 +383,7 @@ export default function GameScreen() {
       <Animated.View style={[styles.edgeGlow, edgeGlowStyle, { borderColor: worldTheme.accentColor }]} pointerEvents="none" />
 
       {/* Combo toast */}
-      <ComboToast key={comboToastKey} visible={comboToastVisible} text={comboToastText} accentColor={worldTheme.accentColor} />
+      <ComboToast nonce={comboToastKey} visible={comboToastVisible} text={comboToastText} accentColor={worldTheme.accentColor} />
 
       {/* Top bar */}
       <View style={styles.topBar}>
@@ -411,7 +426,7 @@ export default function GameScreen() {
             count={hintsRemaining}
             onPress={useHint}
             accentColor={worldTheme.accentColor}
-            textColor={palette.primaryText}
+            textColor={worldTheme.text}
             disabled={hintsRemaining <= 0}
           />
           <HintButton
@@ -419,7 +434,7 @@ export default function GameScreen() {
             count={undoTokensRemaining}
             onPress={undoLastMove}
             accentColor={worldTheme.accentColor}
-            textColor={palette.primaryText}
+            textColor={worldTheme.text}
             disabled={undoTokensRemaining <= 0}
           />
         </View>
@@ -438,7 +453,7 @@ export default function GameScreen() {
           count={reshufflesRemaining}
           onPress={useShuffle}
           accentColor={worldTheme.accentColor}
-          textColor={palette.primaryText}
+          textColor={worldTheme.text}
           disabled={reshufflesRemaining <= 0}
         />
 
@@ -619,12 +634,12 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       borderRadius: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(255,255,255,0.16)',
+      backgroundColor: worldTheme.text + '1A',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.14)',
+      borderColor: worldTheme.text + '14',
     },
     topBarButtonText: {
-      color: palette.primaryText,
+      color: worldTheme.text,
       fontSize: 20,
       fontWeight: '700',
     },
@@ -634,26 +649,30 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       gap: 2,
     },
     topBarTitle: {
-      color: palette.primaryText,
-      fontSize: 13,
-      fontWeight: '700',
+      color: worldTheme.text,
+      fontSize: 14,
+      fontWeight: '600',
+      letterSpacing: 0.5,
       textAlign: 'center',
     },
     topBarMeta: {
-      color: palette.primaryText,
-      fontSize: 17,
-      fontWeight: '800',
+      color: worldTheme.text,
+      fontSize: 20,
+      fontWeight: '700',
       fontFamily: 'serif',
     },
     scoreChip: {
-      fontSize: 13,
-      fontWeight: '900',
+      fontSize: 16,
+      fontWeight: '700',
       letterSpacing: 0.5,
+      textShadowColor: 'rgba(0,0,0,0.2)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
     },
     topBarTimer: {
-      color: palette.primaryText,
-      fontSize: 11,
-      fontWeight: '800',
+      color: worldTheme.text,
+      fontSize: 18,
+      fontWeight: '700',
       letterSpacing: 0.7,
     },
     boardShell: {
@@ -683,7 +702,7 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       fontSize: 20,
     },
     heartEmpty: {
-      color: 'rgba(200,180,180,0.35)',
+      color: worldTheme.text + '33',
       fontSize: 20,
     },
     firecrackerButton: {
@@ -692,7 +711,7 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       paddingHorizontal: 10,
       paddingVertical: 10,
       borderRadius: 16,
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: worldTheme.text + '1A',
       borderWidth: 1,
       borderColor: worldTheme.accentColor,
       gap: 2,
@@ -704,8 +723,8 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       fontSize: 20,
     },
     firecrackerCount: {
-      fontSize: 10,
-      fontWeight: '900',
+      fontSize: 13,
+      fontWeight: '700',
     },
     pauseButton: {
       minWidth: 72,
@@ -714,14 +733,14 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
       paddingHorizontal: 12,
       paddingVertical: 12,
       borderRadius: 999,
-      backgroundColor: 'rgba(255,255,255,0.14)',
+      backgroundColor: worldTheme.text + '1A',
       borderWidth: 1,
       borderColor: worldTheme.accentColor,
     },
     pauseText: {
-      color: palette.primaryText,
-      fontSize: 12,
-      fontWeight: '800',
+      color: worldTheme.text,
+      fontSize: 14,
+      fontWeight: '700',
       letterSpacing: 0.8,
       textTransform: 'uppercase',
     },
@@ -779,16 +798,19 @@ function createStyles(worldTheme: ReturnType<typeof getWorldTheme>, palette: Ret
     },
     scoreLabel: {
       color: palette.secondaryText,
-      fontSize: 12,
-      fontWeight: '800',
-      letterSpacing: 1.1,
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 1.5,
       textTransform: 'uppercase',
     },
     scoreValue: {
       color: palette.primaryText,
       fontSize: 38,
-      fontWeight: '800',
+      fontWeight: '700',
       fontFamily: 'serif',
+      textShadowColor: 'rgba(0,0,0,0.2)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
     },
   });
 }

@@ -106,7 +106,7 @@ export default function IntroScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.copyBlock, copyStyle]}>
-          <Text style={styles.title}>ZenMatch</Text>
+          <Text style={styles.title}>Mahjong Relax</Text>
           <Text style={styles.factLine}>Studies show 20 minutes of Mahjong daily</Text>
           <Text style={styles.factLine}>reduces cortisol (stress hormone) by up to 43%</Text>
           <Text style={styles.citation}>- Journal of Behavioral Medicine, 2019</Text>
@@ -138,33 +138,34 @@ function createStyles() {
       gap: 8,
     },
     title: {
-      color: '#F0EDE6',
-      fontSize: 40,
-      fontWeight: '300',
-      letterSpacing: 1.4,
+      color: '#F5F0E8',
+      fontSize: 42,
+      fontWeight: '700',
+      letterSpacing: 2,
       fontFamily: 'serif',
     },
     factLine: {
-      color: 'rgba(240,237,230,0.82)',
-      fontSize: 16,
+      color: '#D4C8B8',
+      fontSize: 15,
       fontWeight: '400',
       textAlign: 'center',
       lineHeight: 24,
     },
     citation: {
       marginTop: 8,
-      color: 'rgba(240,237,230,0.58)',
-      fontSize: 12,
+      color: '#9A8E7E',
+      fontSize: 11,
+      fontWeight: '300',
       fontStyle: 'italic',
       letterSpacing: 0.4,
     },
     tapCopy: {
       position: 'absolute',
       bottom: 92,
-      color: '#F0EDE6',
-      fontSize: 14,
+      color: '#C9A84C',
+      fontSize: 16,
       fontWeight: '600',
-      letterSpacing: 1.6,
+      letterSpacing: 1,
       textTransform: 'uppercase',
     },
   });

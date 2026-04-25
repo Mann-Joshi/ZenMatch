@@ -108,7 +108,7 @@ function createStyles(palette: ReturnType<typeof getAppPalette>) {
     },
     logo: {
       color: palette.primaryText,
-      fontSize: 38,
+      fontSize: 36,
       fontWeight: '700',
       fontFamily: 'serif',
       letterSpacing: 1.2,
@@ -134,7 +134,8 @@ function createStyles(palette: ReturnType<typeof getAppPalette>) {
     },
     kicker: {
       color: palette.secondaryText,
-      fontSize: 16,
+      fontSize: 15,
+      fontWeight: '400',
       textAlign: 'center',
       lineHeight: 24,
       marginBottom: 18,

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import type { Tile } from '@/game/mahjongLogic';
@@ -24,20 +24,15 @@ interface TileMetrics {
   positions: Record<string, { left: number; top: number }>;
 }
 
+// ── Pure function — called only when layout or screen size changes ─────────────
 function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: number): TileMetrics {
   if (tiles.length === 0) {
-    return {
-      tileWidth: 52,
-      tileHeight: 68,
-      boardWidth: 52,
-      boardHeight: 68,
-      positions: {},
-    };
+    return { tileWidth: 52, tileHeight: 68, boardWidth: 52, boardHeight: 68, positions: {} };
   }
 
-  const rows = tiles.map((tile) => tile.row);
-  const cols = tiles.map((tile) => tile.col);
-  const maxLayer = Math.max(...tiles.map((tile) => tile.layer), 0);
+  const rows = tiles.map((t) => t.row);
+  const cols = tiles.map((t) => t.col);
+  const maxLayer = Math.max(...tiles.map((t) => t.layer), 0);
   const minRow = Math.min(...rows);
   const maxRow = Math.max(...rows);
   const minCol = Math.min(...cols);
@@ -47,7 +42,14 @@ function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: num
   const availableHeight = screenHeight * 0.58;
   const widthUnits = Math.max(1, (maxCol - minCol) * 0.5 + 1.4);
   const heightUnits = Math.max(1, (maxRow - minRow) * 0.76 + 1.3);
-  const tileWidth = Math.max(28, Math.min(52, availableWidth / (widthUnits + maxLayer * 0.18), (availableHeight / (heightUnits + maxLayer * 0.08)) * 0.76));
+  const tileWidth = Math.max(
+    28,
+    Math.min(
+      52,
+      availableWidth / (widthUnits + maxLayer * 0.18),
+      (availableHeight / (heightUnits + maxLayer * 0.08)) * 0.76,
+    ),
+  );
   const tileHeight = tileWidth * (68 / 52);
   const halfStep = (tileWidth + tileWidth * 0.08) / 2;
   const rowStep = tileHeight * 0.72;
@@ -61,19 +63,18 @@ function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: num
     };
   });
 
-  const boardWidth = (maxCol - minCol) * halfStep + tileWidth + maxLayer * layerOffset + tileWidth * 0.08;
-  const boardHeight = (maxRow - minRow) * rowStep + tileHeight + maxLayer * layerOffset + tileWidth * 0.08;
+  const boardWidth =
+    (maxCol - minCol) * halfStep + tileWidth + maxLayer * layerOffset + tileWidth * 0.08;
+  const boardHeight =
+    (maxRow - minRow) * rowStep + tileHeight + maxLayer * layerOffset + tileWidth * 0.08;
 
-  return {
-    tileWidth,
-    tileHeight,
-    boardWidth,
-    boardHeight,
-    positions,
-  };
+  return { tileWidth, tileHeight, boardWidth, boardHeight, positions };
 }
 
-export function TileBoard({
+// ── TileBoard wrapped in React.memo ───────────────────────────────────────────
+// React.memo here prevents re-render when parent game screen updates score/timer
+// but tiles / hintPairIds etc. haven't changed.
+export const TileBoard = memo(function TileBoard({
   tiles,
   worldTheme,
   onTap,
@@ -84,37 +85,52 @@ export function TileBoard({
   highlightedTileIds,
 }: TileBoardProps) {
   const { width, height } = useWindowDimensions();
+
+  // Sort tiles for proper z-order — only when tiles array identity changes
   const orderedTiles = useMemo(
     () =>
-      [...tiles].sort((left, right) => {
-        if (left.layer !== right.layer) {
-          return left.layer - right.layer;
-        }
-        if (left.row !== right.row) {
-          return left.row - right.row;
-        }
-        return left.col - right.col;
+      [...tiles].sort((a, b) => {
+        if (a.layer !== b.layer) return a.layer - b.layer;
+        if (a.row !== b.row) return a.row - b.row;
+        return a.col - b.col;
       }),
     [tiles],
   );
 
-  const metrics = useMemo(() => buildBoardMetrics(orderedTiles, width, height), [height, orderedTiles, width]);
-  const boardStyles = useMemo(() => createBoardStyles(metrics.boardWidth, metrics.boardHeight), [metrics.boardHeight, metrics.boardWidth]);
+  // Board metrics are expensive — memoize on tile identity + screen size only.
+  // Position of existing tiles never changes during a level.
+  // We use orderedTiles.length as an extra guard so a fresh level always
+  // recomputes (tiles is a new array reference, but belt-and-suspenders).
+  const metrics = useMemo(
+    () => buildBoardMetrics(orderedTiles, width, height),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orderedTiles.length, width, height],
+  );
+
+  // Pre-build flat style objects once — avoids StyleSheet.create per frame
   const positionStyles = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(metrics.positions).map(([tileId, position]) => [
+        Object.entries(metrics.positions).map(([tileId, pos]) => [
           tileId,
           StyleSheet.create({
-            position: {
-              position: 'absolute',
-              left: position.left,
-              top: position.top,
-            },
-          }).position,
+            p: { position: 'absolute', left: pos.left, top: pos.top },
+          }).p,
         ]),
-      ) as Record<string, ReturnType<typeof StyleSheet.create>['position']>,
+      ) as Record<string, ReturnType<typeof StyleSheet.create>['p']>,
     [metrics.positions],
+  );
+
+  const boardStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        board: {
+          width: metrics.boardWidth,
+          height: metrics.boardHeight,
+          alignSelf: 'center' as const,
+        },
+      }),
+    [metrics.boardWidth, metrics.boardHeight],
   );
 
   if (orderedTiles.length === 0) {
@@ -123,51 +139,43 @@ export function TileBoard({
 
   return (
     <View style={boardStyles.board}>
-      {orderedTiles.map((tile, index) => (
-        <View
-          key={tile.id}
-          style={positionStyles[tile.id]}
-          // Matched tiles fade to opacity-0 via animation but on React-Native-Web
-          // `disabled` alone does NOT remove pointer events from a Pressable.
-          // Without this, invisible matched tiles intercept taps on the free
-          // tiles that were unblocked by the match.
-          pointerEvents={tile.isMatched ? 'none' : 'auto'}
-        >
-          <MahjongTile
-            tile={tile}
-            worldTheme={worldTheme}
-            isSelected={tile.isSelected}
-            onTap={onTap}
-            tileWidth={metrics.tileWidth}
-            tileHeight={metrics.tileHeight}
-            appearDelayMs={index * 24}
-            hintActive={hintPairIds?.includes(tile.id) ?? false}
-            errorActive={mismatchTileIds.includes(tile.id)}
-            blockedTapNonce={blockedTileId === tile.id ? blockedTapNonce : 0}
-            isBlockedTile={blockedTileId === tile.id}
-            isHighlighted={highlightedTileIds.includes(tile.id)}
-          />
-        </View>
-      ))}
+      {orderedTiles.map((tile, index) => {
+        // Compute per-tile derived booleans here so MahjongTile gets primitives —
+        // primitives are compared by value in memo comparator, not by reference.
+        const isHintActive = hintPairIds?.includes(tile.id) ?? false;
+        const isErrorActive = mismatchTileIds.includes(tile.id);
+        const isThisBlocked = blockedTileId === tile.id;
+        const isHighlighted = highlightedTileIds.includes(tile.id);
+
+        return (
+          <View
+            key={tile.id}
+            style={positionStyles[tile.id]}
+            // Matched tiles: remove pointer events so invisible tiles
+            // don't swallow taps on newly-freed tiles (web + Android fix)
+            pointerEvents={tile.isMatched ? 'none' : 'auto'}
+          >
+            <MahjongTile
+              tile={tile}
+              worldTheme={worldTheme}
+              isSelected={tile.isSelected}
+              onTap={onTap}
+              tileWidth={metrics.tileWidth}
+              tileHeight={metrics.tileHeight}
+              appearDelayMs={index * 24}
+              hintActive={isHintActive}
+              errorActive={isErrorActive}
+              blockedTapNonce={isThisBlocked ? blockedTapNonce : 0}
+              isBlockedTile={isThisBlocked}
+              isHighlighted={isHighlighted}
+            />
+          </View>
+        );
+      })}
     </View>
   );
-
-}
-
-const emptyStyles = StyleSheet.create({
-  board: {
-    width: 52,
-    height: 68,
-    alignSelf: 'center',
-  },
 });
 
-function createBoardStyles(boardWidth: number, boardHeight: number) {
-  return StyleSheet.create({
-    board: {
-      width: boardWidth,
-      height: boardHeight,
-      alignSelf: 'center',
-    },
-  });
-}
+const emptyStyles = StyleSheet.create({
+  board: { width: 52, height: 68, alignSelf: 'center' },
+});

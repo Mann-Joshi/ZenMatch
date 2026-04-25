@@ -8,6 +8,7 @@ export interface WorldTheme {
   particleColors: [string, string, string] | [string, string, string, string];
   ambientParticles: 'petals' | 'leaves' | 'fireflies' | 'bubbles' | 'sparks';
   music: 'peaceful_koto' | 'bamboo_breeze' | 'temple_night' | 'ocean_calm' | 'imperial_gold';
+  text: string;
 }
 
 export type AppearanceMode = 'dark' | 'light';
@@ -23,6 +24,7 @@ export const WORLDS: Record<number, WorldTheme> = {
     particleColors: ['#FF4081', '#F48FB1', '#FCE4EC'],
     ambientParticles: 'petals',
     music: 'peaceful_koto',
+    text: '#31102A',
   },
   2: {
     id: 2,
@@ -34,6 +36,7 @@ export const WORLDS: Record<number, WorldTheme> = {
     particleColors: ['#4CAF50', '#81C784', '#C8E6C9'],
     ambientParticles: 'leaves',
     music: 'bamboo_breeze',
+    text: '#112211',
   },
   3: {
     id: 3,
@@ -45,6 +48,7 @@ export const WORLDS: Record<number, WorldTheme> = {
     particleColors: ['#FFD700', '#FFF176', '#FFECB3'],
     ambientParticles: 'fireflies',
     music: 'temple_night',
+    text: '#F5ECCD',
   },
   4: {
     id: 4,
@@ -56,6 +60,7 @@ export const WORLDS: Record<number, WorldTheme> = {
     particleColors: ['#29B6F6', '#81D4FA', '#E1F5FE'],
     ambientParticles: 'bubbles',
     music: 'ocean_calm',
+    text: '#0B233E',
   },
   5: {
     id: 5,
@@ -67,6 +72,7 @@ export const WORLDS: Record<number, WorldTheme> = {
     particleColors: ['#FFD700', '#FF8F00', '#FFECB3'],
     ambientParticles: 'sparks',
     music: 'imperial_gold',
+    text: '#FDE4C9',
   },
 };
 

@@ -42,7 +42,7 @@ function createStyles(accentColor: string, textColor: string, disabled: boolean)
       borderRadius: 999,
       borderWidth: 1,
       borderColor: accentColor,
-      backgroundColor: disabled ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)',
+      backgroundColor: disabled ? textColor + '0D' : textColor + '14',
       opacity: disabled ? 0.5 : 1,
     },
     label: {

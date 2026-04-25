@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -18,6 +19,9 @@ import { TILE_IMAGES } from '@/data/tilesets/tileImages';
 import type { Tile } from '@/game/mahjongLogic';
 import type { WorldTheme } from '@/theme/worlds';
 
+// ── Reduced to 6 particles (was 8) ── pre-allocate, never dynamic ────────────
+const PARTICLE_COUNT = 6;
+
 interface MahjongTileProps {
   tile: Tile;
   worldTheme: WorldTheme;
@@ -33,6 +37,7 @@ interface MahjongTileProps {
   isHighlighted: boolean;
 }
 
+// ── MatchParticle: pre-rendered, always mounted, animated on match ────────────
 function MatchParticle({
   active,
   color,
@@ -53,17 +58,13 @@ function MatchParticle({
     if (!active) {
       return;
     }
-
     travel.value = 0;
     opacity.value = 1;
-    travel.value = withTiming(1, {
-      duration: 500,
-      easing: Easing.out(Easing.quad),
-    });
+    travel.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.quad) });
     opacity.value = withTiming(0, { duration: 520 });
   }, [active, opacity, travel]);
 
-  const angle = (Math.PI * 2 * index) / 8;
+  const angle = (Math.PI * 2 * index) / PARTICLE_COUNT;
   const radius = Math.max(tileWidth, tileHeight) * 0.52;
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -75,163 +76,197 @@ function MatchParticle({
     ],
   }));
 
-  const styles = useMemo(() => createParticleStyles(color, tileWidth, tileHeight), [color, tileHeight, tileWidth]);
+  const styles = useMemo(
+    () => createParticleStyles(color, tileWidth, tileHeight),
+    [color, tileHeight, tileWidth],
+  );
   return <Animated.View style={[styles.particle, animatedStyle]} />;
 }
 
-export function MahjongTile({
-  tile,
-  worldTheme,
-  isSelected,
-  onTap,
-  tileWidth,
-  tileHeight,
-  appearDelayMs,
-  hintActive,
-  errorActive,
-  blockedTapNonce,
-  isBlockedTile,
-  isHighlighted,
-}: MahjongTileProps) {
-  const face = getTileFace(tile.tileType);
-  const scale = useSharedValue(0.8);
-  const opacity = useSharedValue(tile.isMatched ? 0 : 1);
-  const shake = useSharedValue(0);
-  const glow = useSharedValue(0);
-  const hintGlow = useSharedValue(0);
-  const errorFlash = useSharedValue(0);
-  const matchedProgress = useSharedValue(tile.isMatched ? 1 : 0);
+// ── MahjongTile: wrapped in memo with custom comparison ─────────────────────
+// Only re-renders when the specific tile properties that affect display change.
+export const MahjongTile = memo(
+  function MahjongTile({
+    tile,
+    worldTheme,
+    isSelected,
+    onTap,
+    tileWidth,
+    tileHeight,
+    appearDelayMs,
+    hintActive,
+    errorActive,
+    blockedTapNonce,
+    isBlockedTile,
+    isHighlighted,
+  }: MahjongTileProps) {
+    const face = getTileFace(tile.tileType);
+    const scale = useSharedValue(0.8);
+    const opacity = useSharedValue(tile.isMatched ? 0 : 1);
+    const shake = useSharedValue(0);
+    const glow = useSharedValue(0);
+    const hintGlow = useSharedValue(0);
+    const errorFlash = useSharedValue(0);
+    const matchedProgress = useSharedValue(tile.isMatched ? 1 : 0);
+    const highlightGlow = useSharedValue(0);
 
-  useEffect(() => {
-    scale.value = withDelay(
-      appearDelayMs,
-      withSpring(tile.isMatched ? 0 : 1, {
-        damping: 12,
-        stiffness: 180,
-      }),
+    // ── Appear animation ──────────────────────────────────────────────────────
+    useEffect(() => {
+      scale.value = withDelay(
+        appearDelayMs,
+        withSpring(tile.isMatched ? 0 : 1, { damping: 12, stiffness: 180 }),
+      );
+    }, [appearDelayMs, scale, tile.isMatched]);
+
+    // ── Match / deselect animation ────────────────────────────────────────────
+    useEffect(() => {
+      if (tile.isMatched) {
+        scale.value = withSpring(0, { damping: 11, stiffness: 160 });
+        opacity.value = withTiming(0, { duration: 280 });
+        matchedProgress.value = withTiming(1, { duration: 520 });
+        return;
+      }
+      matchedProgress.value = withTiming(0, { duration: 180 });
+      opacity.value = withTiming(tile.isFree ? 1 : 0.65, { duration: 180 });
+      scale.value = withSpring(isSelected ? 1.08 : 1, { damping: 12, stiffness: 180 });
+    }, [isSelected, matchedProgress, opacity, scale, tile.isFree, tile.isMatched]);
+
+    // ── Selection glow ────────────────────────────────────────────────────────
+    useEffect(() => {
+      glow.value = withTiming(isSelected ? 1 : 0, { duration: 220 });
+    }, [glow, isSelected]);
+
+    // ── Hint pulse ────────────────────────────────────────────────────────────
+    useEffect(() => {
+      if (!hintActive) {
+        cancelAnimation(hintGlow);
+        hintGlow.value = withTiming(0, { duration: 180 });
+        return;
+      }
+      hintGlow.value = withRepeat(withTiming(1, { duration: 650 }), 4, true);
+    }, [hintActive, hintGlow]);
+
+    // ── Highlight glow ────────────────────────────────────────────────────────
+    useEffect(() => {
+      highlightGlow.value = withTiming(isHighlighted ? 1 : 0, { duration: 200 });
+    }, [isHighlighted, highlightGlow]);
+
+    // ── Error flash ───────────────────────────────────────────────────────────
+    useEffect(() => {
+      if (!errorActive) {
+        errorFlash.value = withTiming(0, { duration: 140 });
+        return;
+      }
+      errorFlash.value = withSequence(
+        withTiming(1, { duration: 110 }),
+        withTiming(0, { duration: 200 }),
+      );
+    }, [errorActive, errorFlash]);
+
+    // ── Shake on blocked tap ──────────────────────────────────────────────────
+    useEffect(() => {
+      if (!isBlockedTile) {
+        return;
+      }
+      shake.value = withSequence(
+        withTiming(3, { duration: 55 }),
+        withTiming(-3, { duration: 55 }),
+        withTiming(2, { duration: 45 }),
+        withTiming(-2, { duration: 45 }),
+        withTiming(0, { duration: 45 }),
+      );
+    }, [blockedTapNonce, isBlockedTile, shake]);
+
+    // ── Animated styles (all run on native thread via worklets) ───────────────
+    const animatedStyle = useAnimatedStyle(() => {
+      const activeGlow = Math.max(glow.value, hintGlow.value, highlightGlow.value);
+      return {
+        opacity: opacity.value,
+        transform: [{ translateX: shake.value }, { scale: scale.value }],
+        shadowOpacity: interpolate(activeGlow, [0, 1], [0.12, 0.42]),
+      };
+    });
+
+    const errorOverlayStyle = useAnimatedStyle(() => ({
+      opacity: errorFlash.value * 0.55,
+    }));
+
+    const styles = useMemo(
+      () =>
+        createStyles(worldTheme, tileWidth, tileHeight, isSelected, isHighlighted, face.accentColor),
+      [face.accentColor, isHighlighted, isSelected, tileHeight, tileWidth, worldTheme],
     );
-  }, [appearDelayMs, scale, tile.isMatched]);
 
-  useEffect(() => {
-    if (tile.isMatched) {
-      scale.value = withSpring(0, { damping: 11, stiffness: 160 });
-      opacity.value = withTiming(0, { duration: 280 });
-      matchedProgress.value = withTiming(1, { duration: 520 });
-      return;
-    }
+    // Stable onPress callback — avoids referential inequality on every render
+    const handlePress = useCallback(() => {
+      onTap(tile.id);
+    }, [onTap, tile.id]);
 
-    matchedProgress.value = withTiming(0, { duration: 180 });
-    opacity.value = withTiming(tile.isFree ? 1 : 0.65, { duration: 180 });
-    scale.value = withSpring(isSelected ? 1.08 : 1, { damping: 12, stiffness: 180 });
-  }, [isSelected, matchedProgress, opacity, scale, tile.isFree, tile.isMatched]);
-
-  useEffect(() => {
-    glow.value = withTiming(isSelected ? 1 : 0, { duration: 220 });
-  }, [glow, isSelected]);
-
-  useEffect(() => {
-    if (!hintActive) {
-      // Bug fix: cancel any running repeat animation before fading out
-      cancelAnimation(hintGlow);
-      hintGlow.value = withTiming(0, { duration: 180 });
-      return;
-    }
-
-    hintGlow.value = withRepeat(withTiming(1, { duration: 650 }), 4, true);
-  }, [hintActive, hintGlow]);
-
-  // Highlight glow (matching tiles when a tile is selected)
-  const highlightGlow = useSharedValue(0);
-  useEffect(() => {
-    highlightGlow.value = withTiming(isHighlighted ? 1 : 0, { duration: 200 });
-  }, [isHighlighted, highlightGlow]);
-
-  useEffect(() => {
-    if (!errorActive) {
-      errorFlash.value = withTiming(0, { duration: 140 });
-      return;
-    }
-
-    errorFlash.value = withSequence(
-      withTiming(1, { duration: 110 }),
-      withTiming(0, { duration: 200 }),
-    );
-  }, [errorActive, errorFlash]);
-
-  useEffect(() => {
-    if (!isBlockedTile) {
-      return;
-    }
-
-    shake.value = withSequence(
-      withTiming(3, { duration: 55 }),
-      withTiming(-3, { duration: 55 }),
-      withTiming(2, { duration: 45 }),
-      withTiming(-2, { duration: 45 }),
-      withTiming(0, { duration: 45 }),
-    );
-  }, [blockedTapNonce, isBlockedTile, shake]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    const activeGlow = Math.max(glow.value, hintGlow.value, highlightGlow.value);
-
-    return {
-      opacity: opacity.value,
-      transform: [{ translateX: shake.value }, { scale: scale.value }],
-      shadowOpacity: interpolate(activeGlow, [0, 1], [0.12, 0.42]),
-    };
-  });
-
-  const errorOverlayStyle = useAnimatedStyle(() => ({
-    opacity: errorFlash.value * 0.55,
-  }));
-
-  const styles = useMemo(
-    () => createStyles(worldTheme, tileWidth, tileHeight, isSelected, isHighlighted, face.accentColor),
-    [face.accentColor, isHighlighted, isSelected, tileHeight, tileWidth, worldTheme],
-  );
-
-  return (
-    <Pressable style={styles.pressable} onPress={() => onTap(tile.id)} disabled={tile.isMatched}>
-      <Animated.View style={[styles.tileShell, animatedStyle]}>
-        <View style={styles.rightEdge} />
-        <View style={styles.bottomEdge} />
-        <View style={styles.face}>
-          {TILE_IMAGES[tile.tileType] != null ? (
-            <Image
-              source={TILE_IMAGES[tile.tileType]}
-              style={styles.tileImage}
-              resizeMode="contain"
+    return (
+      // react-native-gesture-handler TouchableOpacity runs on native thread
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={tile.isFree ? 0.75 : 1.0}
+        disabled={tile.isMatched}
+        style={styles.pressable}
+      >
+        <Animated.View style={[styles.tileShell, animatedStyle]}>
+          <View style={styles.rightEdge} />
+          <View style={styles.bottomEdge} />
+          <View style={styles.face}>
+            {TILE_IMAGES[tile.tileType] != null ? (
+              <Image
+                source={TILE_IMAGES[tile.tileType]}
+                style={styles.tileImage}
+                resizeMode="contain"
+                fadeDuration={0}          // critical: prevents Android fade jank
+              />
+            ) : (
+              <>
+                <Text style={styles.symbol}>{face.centerSymbol}</Text>
+                <Text style={styles.title}>{face.displayName}</Text>
+                <Text style={styles.label}>{face.suitLabel}</Text>
+              </>
+            )}
+          </View>
+          <Animated.View style={[styles.errorOverlay, errorOverlayStyle]} />
+          {!tile.isFree && !tile.isMatched ? (
+            <View style={styles.blockedOverlay} />
+          ) : null}
+          {/* Pre-rendered particles — 6 pieces, hidden when inactive */}
+          {Array.from({ length: PARTICLE_COUNT }, (_, index) => (
+            <MatchParticle
+              key={`${tile.id}-p-${index}`}
+              active={tile.isMatched}
+              color={worldTheme.particleColors[index % worldTheme.particleColors.length]}
+              tileWidth={tileWidth}
+              tileHeight={tileHeight}
+              index={index}
             />
-          ) : (
-            // Fallback for tiles without artwork (e.g. dragon_white 白板)
-            <>
-              <Text style={styles.symbol}>{face.centerSymbol}</Text>
-              <Text style={styles.title}>{face.displayName}</Text>
-              <Text style={styles.label}>{face.suitLabel}</Text>
-            </>
-          )}
-        </View>
-        <Animated.View style={[styles.errorOverlay, errorOverlayStyle]} />
-        {/* Blocked tile dark tint — shown when tile is not free to play */}
-        {!tile.isFree && !tile.isMatched ? (
-          <View style={styles.blockedOverlay} />
-        ) : null}
-        {Array.from({ length: 8 }, (_, index) => (
-          <MatchParticle
-            key={`${tile.id}-particle-${index}`}
-            active={tile.isMatched}
-            color={worldTheme.particleColors[index % worldTheme.particleColors.length]}
-            tileWidth={tileWidth}
-            tileHeight={tileHeight}
-            index={index}
-          />
-        ))}
-      </Animated.View>
-    </Pressable>
-  );
-}
+          ))}
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  },
+  // ── Custom memo comparison ─────────────────────────────────────────────────
+  // Only re-render this tile if the properties that affect its visuals changed.
+  (prev, next) => {
+    return (
+      prev.tile.isMatched === next.tile.isMatched &&
+      prev.tile.isFree === next.tile.isFree &&
+      prev.isSelected === next.isSelected &&
+      prev.isHighlighted === next.isHighlighted &&
+      prev.hintActive === next.hintActive &&
+      prev.errorActive === next.errorActive &&
+      prev.isBlockedTile === next.isBlockedTile &&
+      prev.blockedTapNonce === next.blockedTapNonce &&
+      prev.tileWidth === next.tileWidth &&
+      prev.tileHeight === next.tileHeight
+    );
+  },
+);
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 function createStyles(
   worldTheme: WorldTheme,
   tileWidth: number,

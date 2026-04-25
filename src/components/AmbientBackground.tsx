@@ -31,17 +31,17 @@ interface ParticleSeed {
 function getParticleCount(variant: AmbientVariant): number {
   switch (variant) {
     case 'petals':
-      return 12;
+      return 6;  // was 12
     case 'leaves':
-      return 8;
+      return 5;  // was 8
     case 'fireflies':
-      return 15;
+      return 6;  // was 15
     case 'bubbles':
-      return 10;
+      return 5;  // was 10
     case 'sparks':
-      return 20;
+      return 6;  // was 20
     default:
-      return 10;
+      return 5;  // was 10
   }
 }
 
