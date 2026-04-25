@@ -1,0 +1,2 @@
+settigns
+sound

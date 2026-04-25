@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Mahjong Relax",
+    "slug": "mahjong-relax",
+    "scheme": "mahjongrelax",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#0A0F1E"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mahjongrelax.app"
+    },
+    "android": {
+      "package": "com.mahjongrelax.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0F1E"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "updates": {
+      "enabled": false
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "4a000153-e052-4514-b021-85f39f4758cb"
+      }
+    }
+  }
+}
