@@ -17,6 +17,9 @@ import { shallow } from 'zustand/shallow';
 
 import { AmbientBackground } from '@/components/AmbientBackground';
 import { AnimatedCheckmark } from '@/components/AnimatedCheckmark';
+import { AnimatedStar } from '@/components/game/AnimatedStar';
+import { ComboToast } from '@/components/game/ComboToast';
+import { ConfettiPiece } from '@/components/game/ConfettiPiece';
 import { HintButton } from '@/components/HintButton';
 import { PillButton } from '@/components/PillButton';
 import { TileBoard } from '@/components/TileBoard';
@@ -41,135 +44,7 @@ function formatScore(n: number): string {
   return n.toLocaleString();
 }
 
-// ── Confetti piece component ─────────────────────────────────────────────────
 const THREE_INDICES = [0, 1, 2] as const;
-
-const ConfettiPiece = memo(function ConfettiPiece({
-  color,
-  startX,
-  delay,
-  borderRadius,
-}: {
-  color: string;
-  startX: number;
-  delay: number;
-  borderRadius: number;
-}) {
-  const translateY = useSharedValue(-20);
-  const opacity = useSharedValue(0);
-  const rotate = useSharedValue(0);
-
-  useEffect(() => {
-    const direction = startX % 2 === 0 ? 1 : -1;
-    translateY.value = withDelay(delay, withTiming(700, { duration: 1800, easing: Easing.out(Easing.quad) }));
-    opacity.value = withDelay(delay, withSequence(withTiming(1, { duration: 100 }), withDelay(1200, withTiming(0, { duration: 500 }))));
-    rotate.value = withDelay(delay, withTiming(360 * direction, { duration: 1800 }));
-  }, [delay, opacity, rotate, startX, translateY]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { rotate: `${rotate.value}deg` }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        {
-          position: 'absolute',
-          left: startX,
-          top: 0,
-          width: 10,
-          height: 10,
-          borderRadius,
-          backgroundColor: color,
-        },
-        style,
-      ]}
-    />
-  );
-});
-
-// ── Combo toast component ─────────────────────────────────────────────────────
-function ComboToast({
-  visible,
-  text,
-  accentColor,
-  nonce,
-}: {
-  visible: boolean;
-  text: string;
-  accentColor: string;
-  nonce: number;
-}) {
-  const translateY = useSharedValue(0);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    cancelAnimation(translateY);
-    cancelAnimation(opacity);
-    
-    translateY.value = 0;
-    opacity.value = 1;
-    translateY.value = withTiming(-70, { duration: 900, easing: Easing.out(Easing.quad) });
-    opacity.value = withSequence(withTiming(1, { duration: 80 }), withDelay(600, withTiming(0, { duration: 320 })));
-  }, [visible, text, nonce, opacity, translateY]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View style={[comboToastStyles.wrap, style]} pointerEvents="none">
-      <Text style={[comboToastStyles.text, { color: accentColor }]}>{text}</Text>
-    </Animated.View>
-  );
-}
-
-const comboToastStyles = StyleSheet.create({
-  wrap: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '45%',
-    zIndex: 50,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 99,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  text: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-});
-
-// ── Animated star ─────────────────────────────────────────────────────────────
-function AnimatedStar({ active, delay, accentColor }: { active: boolean; delay: number; accentColor: string }) {
-  const scale = useSharedValue(0);
-
-  useEffect(() => {
-    if (active) {
-      scale.value = withDelay(delay, withSpring(1, { damping: 8, stiffness: 220 }));
-    } else {
-      scale.value = 0;
-    }
-  }, [active, delay, scale]);
-
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <Animated.Text style={[{ fontSize: 28, fontWeight: '900' }, style, { color: active ? accentColor : 'rgba(255,255,255,0.18)' }]}>
-      ★
-    </Animated.Text>
-  );
-}
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{
