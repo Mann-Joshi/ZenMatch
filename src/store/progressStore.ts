@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -45,6 +46,46 @@ function getPreviousDate(dateString: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+const secureStorageAdapter = {
+  getItem: async (name: string): Promise<string | null> => {
+    try {
+      const secureValue = await SecureStore.getItemAsync(name);
+      if (secureValue !== null) {
+        return secureValue;
+      }
+
+      // Fallback to AsyncStorage for migration
+      const legacyValue = await AsyncStorage.getItem(name);
+      if (legacyValue !== null) {
+        // Migrate to SecureStore
+        await SecureStore.setItemAsync(name, legacyValue);
+        // Remove from AsyncStorage
+        await AsyncStorage.removeItem(name);
+        return legacyValue;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    try {
+      await SecureStore.setItemAsync(name, value);
+    } catch {
+      return;
+    }
+  },
+  removeItem: async (name: string): Promise<void> => {
+    try {
+      await SecureStore.deleteItemAsync(name);
+      await AsyncStorage.removeItem(name);
+    } catch {
+      return;
+    }
+  },
+};
+
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
@@ -60,7 +101,7 @@ export const useProgressStore = create<ProgressState>()(
       lastClaimedDay: -1,
       lastRewardClaimDate: '',
       hydrateCurrentLevel: async () => {
-        const savedLevel = await AsyncStorage.getItem('currentLevel');
+        const savedLevel = await secureStorageAdapter.getItem('currentLevel');
         const parsedLevel = Number(savedLevel);
         set({ currentLevel: Number.isFinite(parsedLevel) && parsedLevel > 0 ? parsedLevel : 1 });
       },
@@ -82,7 +123,7 @@ export const useProgressStore = create<ProgressState>()(
           }
 
           const currentLevel = Math.max(state.currentLevel, level + 1);
-          void AsyncStorage.setItem('currentLevel', String(currentLevel));
+          void secureStorageAdapter.setItem('currentLevel', String(currentLevel));
 
           return {
             currentLevel,
@@ -149,7 +190,7 @@ export const useProgressStore = create<ProgressState>()(
     }),
     {
       name: 'zenmatch-progress',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => secureStorageAdapter),
     },
   ),
 );
