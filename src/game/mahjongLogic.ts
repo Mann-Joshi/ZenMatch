@@ -187,32 +187,82 @@ export function isBoardCleared(tiles: Tile[]): boolean {
 }
 
 export function getHintPair(tiles: Tile[]): [string, string] | null {
-  const pairs = findAvailablePairs(tiles);
-  if (pairs.length === 0) {
+  const pairsFound = findAvailablePairs(tiles);
+  if (pairsFound.length === 0) {
     return null;
   }
 
+  const computedTiles = computeFreeTiles(tiles);
   let bestPair: [string, string] | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
-  const currentFreeTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched).length;
 
-  for (const pair of pairs) {
-    const simulatedTiles = computeFreeTiles(
-      tiles.map((tile) =>
-        pair.includes(tile.id)
-          ? {
-              ...tile,
-              isMatched: true,
-              isSelected: false,
-              isFree: false,
-            }
-          : tile,
-      ),
-    );
+  let freeActiveTilesCount = 0;
+  for (let i = 0; i < computedTiles.length; i++) {
+    if (computedTiles[i].isFree && !computedTiles[i].isMatched) {
+      freeActiveTilesCount++;
+    }
+  }
 
-    const nextFreeTiles = simulatedTiles.filter((tile) => tile.isFree && !tile.isMatched).length;
-    const score = nextFreeTiles - currentFreeTiles;
+  const initialBuckets = buildTileBuckets(computedTiles);
 
+  for (let p = 0; p < pairsFound.length; p++) {
+    const pair = pairsFound[p];
+
+    let t1: Tile | undefined;
+    let t2: Tile | undefined;
+    for (let i = 0; i < computedTiles.length; i++) {
+      if (computedTiles[i].id === pair[0]) t1 = computedTiles[i];
+      if (computedTiles[i].id === pair[1]) t2 = computedTiles[i];
+    }
+
+    if (!t1 || !t2) continue;
+
+    const key1 = getPositionKey(t1.y, t1.x);
+    const key2 = getPositionKey(t2.y, t2.x);
+
+    const bucket1 = initialBuckets.get(key1) || [];
+    const bucket2 = initialBuckets.get(key2) || [];
+
+    initialBuckets.set(key1, bucket1.filter(t => t.id !== t1!.id));
+    if (key1 === key2) {
+      initialBuckets.set(key1, (initialBuckets.get(key1) || []).filter(t => t.id !== t2!.id));
+    } else {
+      initialBuckets.set(key2, bucket2.filter(t => t.id !== t2!.id));
+    }
+
+    t1.isMatched = true;
+    t2.isMatched = true;
+
+    const nearby1 = getNearbyTiles(t1, initialBuckets, SIDE_OVERLAP_ROW, SIDE_OVERLAP_COL);
+    const nearby2 = getNearbyTiles(t2, initialBuckets, SIDE_OVERLAP_ROW, SIDE_OVERLAP_COL);
+
+    const candidatesToCheck = new Set<Tile>();
+    for (let i = 0; i < nearby1.length; i++) {
+      if (!nearby1[i].isMatched) candidatesToCheck.add(nearby1[i]);
+    }
+    for (let i = 0; i < nearby2.length; i++) {
+      if (!nearby2[i].isMatched) candidatesToCheck.add(nearby2[i]);
+    }
+
+    let nextFreeTilesCount = freeActiveTilesCount - 2;
+
+    for (const tile of candidatesToCheck) {
+      if (tile.isFree) nextFreeTilesCount--;
+
+      const blockedAbove = hasTopBlocker(tile, initialBuckets);
+      const blockedLeft = hasSideBlocker(tile, initialBuckets, 'left');
+      const blockedRight = hasSideBlocker(tile, initialBuckets, 'right');
+      const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
+
+      if (isFree) nextFreeTilesCount++;
+    }
+
+    t1.isMatched = false;
+    t2.isMatched = false;
+    initialBuckets.set(key1, bucket1);
+    initialBuckets.set(key2, bucket2);
+
+    const score = nextFreeTilesCount - freeActiveTilesCount;
     if (score > bestScore) {
       bestScore = score;
       bestPair = pair;
