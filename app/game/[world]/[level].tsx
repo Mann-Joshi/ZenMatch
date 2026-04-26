@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -13,6 +13,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { shallow } from 'zustand/shallow';
 
 import { AmbientBackground } from '@/components/AmbientBackground';
 import { AnimatedCheckmark } from '@/components/AnimatedCheckmark';
@@ -41,16 +42,29 @@ function formatScore(n: number): string {
 }
 
 // ── Confetti piece component ─────────────────────────────────────────────────
-function ConfettiPiece({ color, startX, delay }: { color: string; startX: number; delay: number }) {
+const THREE_INDICES = [0, 1, 2] as const;
+
+const ConfettiPiece = memo(function ConfettiPiece({
+  color,
+  startX,
+  delay,
+  borderRadius,
+}: {
+  color: string;
+  startX: number;
+  delay: number;
+  borderRadius: number;
+}) {
   const translateY = useSharedValue(-20);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
 
   useEffect(() => {
+    const direction = startX % 2 === 0 ? 1 : -1;
     translateY.value = withDelay(delay, withTiming(700, { duration: 1800, easing: Easing.out(Easing.quad) }));
     opacity.value = withDelay(delay, withSequence(withTiming(1, { duration: 100 }), withDelay(1200, withTiming(0, { duration: 500 }))));
-    rotate.value = withDelay(delay, withTiming(360 * (Math.random() > 0.5 ? 1 : -1), { duration: 1800 }));
-  }, [delay, opacity, rotate, translateY]);
+    rotate.value = withDelay(delay, withTiming(360 * direction, { duration: 1800 }));
+  }, [delay, opacity, rotate, startX, translateY]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { rotate: `${rotate.value}deg` }],
@@ -66,14 +80,14 @@ function ConfettiPiece({ color, startX, delay }: { color: string; startX: number
           top: 0,
           width: 10,
           height: 10,
-          borderRadius: Math.random() > 0.5 ? 5 : 2,
+          borderRadius,
           backgroundColor: color,
         },
         style,
       ]}
     />
   );
-}
+});
 
 // ── Combo toast component ─────────────────────────────────────────────────────
 function ComboToast({
@@ -171,7 +185,17 @@ export default function GameScreen() {
   const routeSeed = typeof params.seed === 'string' ? params.seed : new Date().toISOString().slice(0, 10);
   const routeLayoutId = typeof params.layoutId === 'string' ? params.layoutId : 'turtle';
 
-  const tiles = useGameStore((state) => state.tiles);
+  const boardState = useGameStore(
+    (state) => ({
+      tiles: state.tiles,
+      hintPairIds: state.hintPairIds,
+      mismatchTileIds: state.mismatchTileIds,
+      blockedTileId: state.blockedTileId,
+      blockedTapNonce: state.blockedTapNonce,
+      highlightedTileIds: state.highlightedTileIds,
+    }),
+    shallow,
+  );
   const matchedPairs = useGameStore((state) => state.matchedPairs);
   const totalPairs = useGameStore((state) => state.totalPairs);
   const hearts = useGameStore((state) => state.hearts);
@@ -188,15 +212,10 @@ export default function GameScreen() {
   const isGameOver = useGameStore((state) => state.isGameOver);
   const timerEnabled = useGameStore((state) => state.timerEnabled);
   const timeLimitSeconds = useGameStore((state) => state.timeLimitSeconds);
-  const hintPairIds = useGameStore((state) => state.hintPairIds);
-  const mismatchTileIds = useGameStore((state) => state.mismatchTileIds);
-  const blockedTileId = useGameStore((state) => state.blockedTileId);
-  const blockedTapNonce = useGameStore((state) => state.blockedTapNonce);
   const score = useGameStore((state) => state.score);
   const finalScore = useGameStore((state) => state.finalScore);
   const comboCount = useGameStore((state) => state.comboCount);
   const comboMultiplier = useGameStore((state) => state.comboMultiplier);
-  const highlightedTileIds = useGameStore((state) => state.highlightedTileIds);
   const firecrackersRemaining = useGameStore((state) => state.firecrackersRemaining);
 
   const loadLevel = useGameStore((state) => state.loadLevel);
@@ -229,6 +248,7 @@ export default function GameScreen() {
   const worldTheme = getWorldTheme(world);
   const palette = getAppPalette(appearanceMode);
   const styles = useMemo(() => createStyles(worldTheme, palette), [palette, worldTheme]);
+  const ambientColors = useMemo(() => [...worldTheme.particleColors], [worldTheme.particleColors]);
 
   // Edge glow for 3x+ combos
   const edgeGlow = useSharedValue(0);
@@ -271,7 +291,7 @@ export default function GameScreen() {
     };
   }, [worldTheme.music]);
 
-  const toastTimeoutRef = useRef<NodeJS.Timeout>();
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Combo toast trigger
   useEffect(() => {
@@ -357,11 +377,28 @@ export default function GameScreen() {
         color: worldTheme.particleColors[i % worldTheme.particleColors.length],
         startX: (i / 30) * 380 - 10,
         delay: Math.floor(i * 55),
+        borderRadius: i % 2 === 0 ? 5 : 2,
       })),
     [worldTheme.particleColors],
   );
 
-  function handleNextLevel(): void {
+  const handleBack = useCallback(() => {
+    router.back();
+  }, []);
+
+  const handlePause = useCallback(() => {
+    setPaused(true);
+  }, []);
+
+  const handleResume = useCallback(() => {
+    setPaused(false);
+  }, []);
+
+  const handleBackToMenu = useCallback(() => {
+    router.replace('/home');
+  }, []);
+
+  const handleNextLevel = useCallback((): void => {
     if (isDailyRoute) {
       router.replace('/daily');
       return;
@@ -373,11 +410,11 @@ export default function GameScreen() {
     }
 
     router.replace(`/game/${world}/${level + 1}`);
-  }
+  }, [isDailyRoute, level, world]);
 
   return (
     <SafeAreaView style={styles.screen}>
-      <AmbientBackground variant={worldTheme.ambientParticles} colors={[...worldTheme.particleColors]} />
+      <AmbientBackground variant={worldTheme.ambientParticles} colors={ambientColors} />
 
       {/* Screen edge glow for 3x+ combos */}
       <Animated.View style={[styles.edgeGlow, edgeGlowStyle, { borderColor: worldTheme.accentColor }]} pointerEvents="none" />
@@ -387,7 +424,7 @@ export default function GameScreen() {
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        <Pressable style={styles.topBarButton} onPress={() => router.back()}>
+        <Pressable style={styles.topBarButton} onPress={handleBack}>
           <Text style={styles.topBarButtonText}>←</Text>
         </Pressable>
 
@@ -407,14 +444,14 @@ export default function GameScreen() {
 
       <View style={styles.boardShell}>
         <TileBoard
-          tiles={tiles}
+          tiles={boardState.tiles}
           worldTheme={worldTheme}
           onTap={tapTile}
-          hintPairIds={hintPairIds}
-          mismatchTileIds={mismatchTileIds}
-          blockedTileId={blockedTileId}
-          blockedTapNonce={blockedTapNonce}
-          highlightedTileIds={highlightedTileIds}
+          hintPairIds={boardState.hintPairIds}
+          mismatchTileIds={boardState.mismatchTileIds}
+          blockedTileId={boardState.blockedTileId}
+          blockedTapNonce={boardState.blockedTapNonce}
+          highlightedTileIds={boardState.highlightedTileIds}
         />
       </View>
 
@@ -441,7 +478,7 @@ export default function GameScreen() {
 
         {/* Hearts / lives display */}
         <View style={styles.heartsRow}>
-          {Array.from({ length: 3 }, (_, i) => (
+          {THREE_INDICES.map((i) => (
             <Text key={`heart-${i}`} style={i < hearts ? styles.heartActive : styles.heartEmpty}>
               ❤
             </Text>
@@ -467,7 +504,7 @@ export default function GameScreen() {
           <Text style={[styles.firecrackerCount, { color: worldTheme.accentColor }]}>{firecrackersRemaining}</Text>
         </Pressable>
 
-        <Pressable style={styles.pauseButton} onPress={() => setPaused(true)}>
+        <Pressable style={styles.pauseButton} onPress={handlePause}>
           <Text style={styles.pauseText}>Pause</Text>
         </Pressable>
       </View>
@@ -480,7 +517,7 @@ export default function GameScreen() {
             <Text style={styles.overlayCopy}>Take a breath. The board will be right where you left it.</Text>
             <PillButton
               label="Resume"
-              onPress={() => setPaused(false)}
+              onPress={handleResume}
               backgroundColor={palette.buttonBackground}
               textColor={palette.buttonText}
               shadowColor={palette.shadowColor}
@@ -546,7 +583,7 @@ export default function GameScreen() {
             />
             <PillButton
               label="Back to Menu"
-              onPress={() => router.replace('/home')}
+              onPress={handleBackToMenu}
               backgroundColor={palette.buttonBackground}
               textColor={palette.buttonText}
               shadowColor={palette.shadowColor}
@@ -562,7 +599,13 @@ export default function GameScreen() {
           {showConfetti ? (
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               {confettiPieces.map((p) => (
-                <ConfettiPiece key={p.key} color={p.color} startX={p.startX} delay={p.delay} />
+                <ConfettiPiece
+                  key={p.key}
+                  color={p.color}
+                  startX={p.startX}
+                  delay={p.delay}
+                  borderRadius={p.borderRadius}
+                />
               ))}
             </View>
           ) : null}
@@ -573,7 +616,7 @@ export default function GameScreen() {
 
             {/* Animated stars */}
             <View style={styles.starRow}>
-              {Array.from({ length: 3 }, (_, index) => (
+              {THREE_INDICES.map((index) => (
                 <AnimatedStar
                   key={`star-${index}`}
                   active={index < stars}

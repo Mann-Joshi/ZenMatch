@@ -14,6 +14,9 @@ const TOP_OVERLAP_ROW = 1;
 const TOP_OVERLAP_COL = 1;
 const SIDE_OVERLAP_ROW = 0.5;
 const SIDE_OVERLAP_COL = 1;
+const POSITION_SCALE = 2;
+
+type TileBuckets = Map<string, Tile[]>;
 
 function isTileActive(tile: Tile): boolean {
   return !tile.isMatched;
@@ -27,19 +30,67 @@ function isFlowerTile(tileType: string): boolean {
   return tileType.startsWith('flower_');
 }
 
-function hasTopBlocker(tile: Tile, tiles: Tile[]): boolean {
-  return tiles.some(
+function getPositionKey(row: number, col: number): string {
+  return `${Math.round(row * POSITION_SCALE)}:${Math.round(col * POSITION_SCALE)}`;
+}
+
+function getScaledPosition(tile: Tile): { row: number; col: number } {
+  return {
+    row: Math.round(tile.row * POSITION_SCALE),
+    col: Math.round(tile.col * POSITION_SCALE),
+  };
+}
+
+function buildTileBuckets(tiles: Tile[]): TileBuckets {
+  const buckets: TileBuckets = new Map();
+
+  for (const tile of tiles) {
+    if (!isTileActive(tile)) {
+      continue;
+    }
+
+    const key = getPositionKey(tile.row, tile.col);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(tile);
+    } else {
+      buckets.set(key, [tile]);
+    }
+  }
+
+  return buckets;
+}
+
+function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, colRadius: number): Tile[] {
+  const center = getScaledPosition(tile);
+  const rowSteps = Math.ceil(rowRadius * POSITION_SCALE);
+  const colSteps = Math.ceil(colRadius * POSITION_SCALE);
+  const candidates: Tile[] = [];
+
+  for (let row = center.row - rowSteps; row <= center.row + rowSteps; row += 1) {
+    for (let col = center.col - colSteps; col <= center.col + colSteps; col += 1) {
+      const bucket = buckets.get(`${row}:${col}`);
+      if (bucket) {
+        candidates.push(...bucket);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function hasTopBlocker(tile: Tile, buckets: TileBuckets): boolean {
+  return getNearbyTiles(tile, buckets, TOP_OVERLAP_ROW, TOP_OVERLAP_COL).some(
     (candidate) =>
       candidate.id !== tile.id &&
-      isTileActive(candidate) &&
       candidate.layer > tile.layer &&
       Math.abs(candidate.row - tile.row) <= TOP_OVERLAP_ROW &&
       Math.abs(candidate.col - tile.col) <= TOP_OVERLAP_COL,
   );
 }
 
-function hasSideBlocker(tile: Tile, tiles: Tile[], direction: 'left' | 'right'): boolean {
-  return tiles.some((candidate) => {
+function hasSideBlocker(tile: Tile, buckets: TileBuckets, direction: 'left' | 'right'): boolean {
+  return getNearbyTiles(tile, buckets, SIDE_OVERLAP_ROW, SIDE_OVERLAP_COL).some((candidate) => {
     if (candidate.id === tile.id || !isTileActive(candidate) || candidate.layer !== tile.layer) {
       return false;
     }
@@ -53,18 +104,29 @@ function hasSideBlocker(tile: Tile, tiles: Tile[], direction: 'left' | 'right'):
 }
 
 export function computeFreeTiles(tiles: Tile[]): Tile[] {
+  const buckets = buildTileBuckets(tiles);
+
   return tiles.map((tile) => {
     if (tile.isMatched) {
+      if (!tile.isFree && !tile.isSelected) {
+        return tile;
+      }
+
       return { ...tile, isFree: false, isSelected: false };
     }
 
-    const blockedAbove = hasTopBlocker(tile, tiles);
-    const blockedLeft = hasSideBlocker(tile, tiles, 'left');
-    const blockedRight = hasSideBlocker(tile, tiles, 'right');
+    const blockedAbove = hasTopBlocker(tile, buckets);
+    const blockedLeft = hasSideBlocker(tile, buckets, 'left');
+    const blockedRight = hasSideBlocker(tile, buckets, 'right');
+    const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
+
+    if (tile.isFree === isFree) {
+      return tile;
+    }
 
     return {
       ...tile,
-      isFree: !blockedAbove && (!blockedLeft || !blockedRight),
+      isFree,
     };
   });
 }
@@ -124,9 +186,9 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
 
   let bestPair: [string, string] | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
+  const currentFreeTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched).length;
 
   for (const pair of pairs) {
-    const currentFreeTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched).length;
     const simulatedTiles = computeFreeTiles(
       tiles.map((tile) =>
         pair.includes(tile.id)
@@ -193,4 +255,3 @@ export function calculateScore(timeRemaining: number, hintsUsed: number, reshuff
   const reshuffleBonus = reshufflesUsed === 0 ? 200 : 0;
   return 1000 + Math.max(0, Math.floor(timeRemaining)) * 10 + unusedHints * 50 + reshuffleBonus;
 }
-

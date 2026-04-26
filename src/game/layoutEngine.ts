@@ -6,7 +6,7 @@ import towerLayout from '@/data/layouts/tower.json';
 import turtleLayout from '@/data/layouts/turtle.json';
 import { getShuffledPairTypes } from '@/data/tilesets/standard';
 import { computeFreeTiles, type Tile } from '@/game/mahjongLogic';
-import { createSeededRandom, shuffleArray, type SeedInput } from '@/utils/random';
+import { createSeededRandom, type SeedInput } from '@/utils/random';
 
 export interface TilePosition {
   row: number;
@@ -24,6 +24,7 @@ export interface BoardLayout {
 export interface LevelBlueprint {
   layoutId: string;
   tileCount: number;
+  maxLayer: number | null;
   timerEnabled: boolean;
   timeLimitSeconds: number | null;
   boss: boolean;
@@ -38,12 +39,37 @@ export interface DifficultyConfig {
   tier: DifficultyTier;
   tileCount: number;
   layoutId: string;
+  maxLayer: number | null;
   timerEnabled: boolean;
   timeLimitSeconds: number | null;
   freeHints: number;
   freeUndos: number;
   freeShuffles: number;
 }
+
+const LEVEL_LAYOUT_SEQUENCE: Array<Pick<DifficultyConfig, 'layoutId' | 'tileCount' | 'maxLayer'>> = [
+  { layoutId: 'cross', tileCount: 24, maxLayer: 0 },
+  { layoutId: 'tower', tileCount: 28, maxLayer: 0 },
+  { layoutId: 'flower', tileCount: 32, maxLayer: 0 },
+  { layoutId: 'pyramid', tileCount: 36, maxLayer: 0 },
+  { layoutId: 'turtle', tileCount: 40, maxLayer: 0 },
+  { layoutId: 'cross', tileCount: 48, maxLayer: 1 },
+  { layoutId: 'tower', tileCount: 54, maxLayer: 1 },
+  { layoutId: 'flower', tileCount: 60, maxLayer: 1 },
+  { layoutId: 'pyramid', tileCount: 66, maxLayer: 1 },
+  { layoutId: 'turtle', tileCount: 72, maxLayer: 1 },
+  { layoutId: 'cross', tileCount: 78, maxLayer: 2 },
+  { layoutId: 'tower', tileCount: 84, maxLayer: 2 },
+  { layoutId: 'flower', tileCount: 90, maxLayer: 2 },
+  { layoutId: 'pyramid', tileCount: 96, maxLayer: 2 },
+  { layoutId: 'turtle', tileCount: 102, maxLayer: 2 },
+  { layoutId: 'tower', tileCount: 108, maxLayer: null },
+  { layoutId: 'flower', tileCount: 114, maxLayer: null },
+  { layoutId: 'pyramid', tileCount: 120, maxLayer: null },
+  { layoutId: 'turtle', tileCount: 126, maxLayer: null },
+  { layoutId: 'dragon', tileCount: 132, maxLayer: null },
+  { layoutId: 'dragon', tileCount: 144, maxLayer: null },
+];
 
 /**
  * Returns the difficulty configuration for a given world/level combination.
@@ -54,12 +80,14 @@ export interface DifficultyConfig {
  *   L21    → Boss
  */
 export function getDifficultyConfig(world: number, level: number): DifficultyConfig {
+  const sequenceIndex = Math.max(0, Math.min(LEVEL_LAYOUT_SEQUENCE.length - 1, level - 1));
+  const layout = LEVEL_LAYOUT_SEQUENCE[sequenceIndex];
+
   // Boss level
   if (level >= 21) {
     return {
       tier: 'boss',
-      tileCount: 144,
-      layoutId: 'dragon',
+      ...layout,
       timerEnabled: true,
       timeLimitSeconds: 600,
       freeHints: 0,
@@ -71,8 +99,7 @@ export function getDifficultyConfig(world: number, level: number): DifficultyCon
   if (level >= 15) {
     return {
       tier: 'hard',
-      tileCount: level >= 18 ? 144 : 108,
-      layoutId: 'turtle',
+      ...layout,
       timerEnabled: true,
       timeLimitSeconds: 900,
       freeHints: 1,
@@ -81,11 +108,10 @@ export function getDifficultyConfig(world: number, level: number): DifficultyCon
     };
   }
   // Medium levels
-  if (level >= 8) {
+  if (level >= 6) {
     return {
       tier: 'medium',
-      tileCount: level >= 11 ? 96 : 72,
-      layoutId: level >= 11 ? 'flower' : 'cross',
+      ...layout,
       timerEnabled: false,
       timeLimitSeconds: null,
       freeHints: 2,
@@ -96,8 +122,7 @@ export function getDifficultyConfig(world: number, level: number): DifficultyCon
   // Easy levels (default)
   return {
     tier: 'easy',
-    tileCount: 60,
-    layoutId: 'pyramid',
+    ...layout,
     timerEnabled: false,
     timeLimitSeconds: null,
     freeHints: 3,
@@ -124,15 +149,19 @@ function getLayoutCenter(layout: BoardLayout): { centerRow: number; centerCol: n
   return { centerRow, centerCol };
 }
 
-function trimPositions(layout: BoardLayout, tileCount: number): TilePosition[] {
-  if (tileCount >= layout.positions.length) {
-    return [...layout.positions];
+function trimPositions(layout: BoardLayout, tileCount: number, maxLayer: number | null = null): TilePosition[] {
+  const availablePositions =
+    maxLayer == null ? layout.positions : layout.positions.filter((position) => position.layer <= maxLayer);
+
+  if (tileCount >= availablePositions.length) {
+    const safeLength = availablePositions.length - (availablePositions.length % 2);
+    return availablePositions.slice(0, safeLength);
   }
 
   const safeTileCount = tileCount - (tileCount % 2);
-  const { centerRow, centerCol } = getLayoutCenter(layout);
+  const { centerRow, centerCol } = getLayoutCenter({ ...layout, positions: availablePositions });
 
-  return [...layout.positions]
+  return [...availablePositions]
     .sort((left, right) => {
       if (left.layer !== right.layer) {
         return left.layer - right.layer;
@@ -149,11 +178,13 @@ export function getLayoutById(layoutId: string): BoardLayout {
   return LAYOUTS[layoutId] ?? LAYOUTS.turtle;
 }
 
-export function materializeLayout(layoutId: string, tileCount?: number): BoardLayout {
+export function materializeLayout(layoutId: string, tileCount?: number, maxLayer: number | null = null): BoardLayout {
   const baseLayout = getLayoutById(layoutId);
-  const positions = trimPositions(baseLayout, tileCount ?? baseLayout.tileCount);
+  const positions = trimPositions(baseLayout, tileCount ?? baseLayout.tileCount, maxLayer);
   return {
     ...baseLayout,
+    id: maxLayer == null ? baseLayout.id : `${baseLayout.id}-layer-${maxLayer}`,
+    name: maxLayer == null ? baseLayout.name : `${baseLayout.name} L${maxLayer}`,
     tileCount: positions.length,
     positions,
   };
@@ -164,6 +195,7 @@ export function getLevelBlueprint(world: number, level: number): LevelBlueprint 
   return {
     layoutId: cfg.layoutId,
     tileCount: cfg.tileCount,
+    maxLayer: cfg.maxLayer,
     timerEnabled: cfg.timerEnabled,
     timeLimitSeconds: cfg.timeLimitSeconds,
     boss: cfg.tier === 'boss',
@@ -263,4 +295,3 @@ export function buildBoardTiles(layout: BoardLayout, seed: SeedInput): Tile[] {
 
   return computeFreeTiles(finalTiles);
 }
-

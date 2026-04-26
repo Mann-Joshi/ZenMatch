@@ -21,6 +21,7 @@ import type { WorldTheme } from '@/theme/worlds';
 
 // ── Reduced to 6 particles (was 8) ── pre-allocate, never dynamic ────────────
 const PARTICLE_COUNT = 6;
+const PARTICLE_INDICES = Array.from({ length: PARTICLE_COUNT }, (_, index) => index);
 
 interface MahjongTileProps {
   tile: Tile;
@@ -38,7 +39,7 @@ interface MahjongTileProps {
 }
 
 // ── MatchParticle: pre-rendered, always mounted, animated on match ────────────
-function MatchParticle({
+const MatchParticle = memo(function MatchParticle({
   active,
   color,
   tileWidth,
@@ -81,7 +82,7 @@ function MatchParticle({
     [color, tileHeight, tileWidth],
   );
   return <Animated.View style={[styles.particle, animatedStyle]} />;
-}
+});
 
 // ── MahjongTile: wrapped in memo with custom comparison ─────────────────────
 // Only re-renders when the specific tile properties that affect display change.
@@ -234,7 +235,7 @@ export const MahjongTile = memo(
             <View style={styles.blockedOverlay} />
           ) : null}
           {/* Pre-rendered particles — 6 pieces, hidden when inactive */}
-          {Array.from({ length: PARTICLE_COUNT }, (_, index) => (
+          {PARTICLE_INDICES.map((index) => (
             <MatchParticle
               key={`${tile.id}-p-${index}`}
               active={tile.isMatched}
@@ -254,6 +255,9 @@ export const MahjongTile = memo(
     return (
       prev.tile.isMatched === next.tile.isMatched &&
       prev.tile.isFree === next.tile.isFree &&
+      prev.tile.tileType === next.tile.tileType &&
+      prev.tile.id === next.tile.id &&
+      prev.worldTheme.id === next.worldTheme.id &&
       prev.isSelected === next.isSelected &&
       prev.isHighlighted === next.isHighlighted &&
       prev.hintActive === next.hintActive &&
@@ -261,7 +265,8 @@ export const MahjongTile = memo(
       prev.isBlockedTile === next.isBlockedTile &&
       prev.blockedTapNonce === next.blockedTapNonce &&
       prev.tileWidth === next.tileWidth &&
-      prev.tileHeight === next.tileHeight
+      prev.tileHeight === next.tileHeight &&
+      prev.appearDelayMs === next.appearDelayMs
     );
   },
 );

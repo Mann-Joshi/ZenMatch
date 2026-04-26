@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { buildBoardTiles, getDifficultyConfig, getLevelBlueprint, materializeLayout, type BoardLayout } from '@/game/layoutEngine';
+import { buildBoardTiles, getLevelBlueprint, materializeLayout, type BoardLayout } from '@/game/layoutEngine';
 import {
   areTilesMatching,
   calculateFinalScore,
@@ -28,6 +28,9 @@ import {
 interface UndoEntry {
   tileIds: [string, string];
 }
+
+let hintClearTimeout: ReturnType<typeof setTimeout> | null = null;
+let mismatchClearTimeout: ReturnType<typeof setTimeout> | null = null;
 
 interface GameState {
   tiles: Tile[];
@@ -84,25 +87,32 @@ interface GameState {
   useFirecracker: () => void;
 }
 
+function clearTransientTimers(): void {
+  if (hintClearTimeout) {
+    clearTimeout(hintClearTimeout);
+    hintClearTimeout = null;
+  }
+
+  if (mismatchClearTimeout) {
+    clearTimeout(mismatchClearTimeout);
+    mismatchClearTimeout = null;
+  }
+}
+
 function resetSelections(tiles: Tile[]): Tile[] {
-  return tiles.map((tile) => ({
-    ...tile,
-    isSelected: false,
-  }));
+  return tiles.map((tile) => (tile.isSelected ? { ...tile, isSelected: false } : tile));
 }
 
 function setSelectedTile(tiles: Tile[], tileId: string | null): Tile[] {
-  return computeFreeTiles(
-    tiles.map((tile) => ({
-      ...tile,
-      isSelected: tileId === tile.id,
-    })),
-  );
+  return tiles.map((tile) => {
+    const isSelected = tileId === tile.id;
+    return tile.isSelected === isSelected ? tile : { ...tile, isSelected };
+  });
 }
 
 /** Returns tile IDs of all free tiles whose type matches the given tile (excluding itself). */
 function computeHighlightedIds(tiles: Tile[], selectedTile: Tile): string[] {
-  const freeTiles = computeFreeTiles(tiles).filter((t) => t.isFree && !t.isMatched && t.id !== selectedTile.id);
+  const freeTiles = tiles.filter((t) => t.isFree && !t.isMatched && t.id !== selectedTile.id);
   return freeTiles
     .filter((t) => areTilesMatching(selectedTile, t))
     .map((t) => t.id);
@@ -147,10 +157,25 @@ export const useGameStore = create<GameState>()((set, get) => ({
   firecrackersRemaining: 1,
 
   loadLevel: (world, level) => {
+    clearTransientTimers();
+    set({
+      tiles: [],
+      selectedTileId: null,
+      isTimerRunning: false,
+      hintPairIds: null,
+      mismatchTileIds: [],
+      blockedTileId: null,
+      highlightedTileIds: [],
+      undoStack: [],
+    });
+
+    const marker = `[perf] loadLevel ${world}-${level}`;
+    if (__DEV__) console.time(marker);
     const blueprint = getLevelBlueprint(world, level);
-    const layout = materializeLayout(blueprint.layoutId, blueprint.tileCount);
+    const layout = materializeLayout(blueprint.layoutId, blueprint.tileCount, blueprint.maxLayer);
     const seed = `${world}-${level}`;
     const tiles = buildBoardTiles(layout, seed);
+    if (__DEV__) console.timeEnd(marker);
 
     // Draw banked hints/shuffles from progressStore, fall back to difficulty defaults
     const progress = useProgressStore.getState();
@@ -199,8 +224,23 @@ export const useGameStore = create<GameState>()((set, get) => ({
   },
 
   loadDailyChallenge: (world, layoutId, seed) => {
+    clearTransientTimers();
+    set({
+      tiles: [],
+      selectedTileId: null,
+      isTimerRunning: false,
+      hintPairIds: null,
+      mismatchTileIds: [],
+      blockedTileId: null,
+      highlightedTileIds: [],
+      undoStack: [],
+    });
+
+    const marker = `[perf] loadDaily ${layoutId}-${seed}`;
+    if (__DEV__) console.time(marker);
     const layout = materializeLayout(layoutId);
     const tiles = buildBoardTiles(layout, `daily-${seed}`);
+    if (__DEV__) console.timeEnd(marker);
 
     set({
       tiles,
@@ -266,7 +306,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
         tiles,
         selectedTileId: tileId,
         blockedTileId: null,
-        highlightedTileIds: [],
+        highlightedTileIds: computeHighlightedIds(tiles, tappedTile),
       });
       void playSfx('tile_select');
       void hapticTileSelect();
@@ -303,13 +343,13 @@ export const useGameStore = create<GameState>()((set, get) => ({
       const newScore = state.score + matchPoints;
 
       const nextTiles = computeFreeTiles(
-        resetSelections(
-          state.tiles.map((tile) =>
-            tile.id === selectedTile.id || tile.id === tappedTile.id
-              ? { ...tile, isMatched: true }
-              : tile,
-          ),
-        ),
+        state.tiles.map((tile) => {
+          if (tile.id === selectedTile.id || tile.id === tappedTile.id) {
+            return { ...tile, isMatched: true, isSelected: false, isFree: false };
+          }
+
+          return tile.isSelected ? { ...tile, isSelected: false } : tile;
+        }),
       );
       const nextMatchedPairs = state.matchedPairs + 1;
       const nextCleared = isBoardCleared(nextTiles);
@@ -376,10 +416,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
 
     void playSfx('tile_no_match');
     void hapticNoMatch();
-    setTimeout(() => {
+    if (mismatchClearTimeout) {
+      clearTimeout(mismatchClearTimeout);
+    }
+    mismatchClearTimeout = setTimeout(() => {
       if (get().selectedTileId === null) {
         set({ mismatchTileIds: [] });
       }
+      mismatchClearTimeout = null;
     }, 420);
   },
 
@@ -403,10 +447,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
     void playSfx('hint_reveal');
     void hapticHint();
 
-    setTimeout(() => {
+    if (hintClearTimeout) {
+      clearTimeout(hintClearTimeout);
+    }
+    hintClearTimeout = setTimeout(() => {
       if (get().hintPairIds?.[0] === pair[0] && get().hintPairIds?.[1] === pair[1]) {
         set({ hintPairIds: null });
       }
+      hintClearTimeout = null;
     }, 2000);
   },
 

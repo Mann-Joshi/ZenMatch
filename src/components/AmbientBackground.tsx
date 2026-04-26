@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { AppState, Dimensions, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -70,7 +70,7 @@ function buildParticles(variant: AmbientVariant, colors: string[]): ParticleSeed
   }));
 }
 
-function AmbientParticle({ particle, variant, paused }: { particle: ParticleSeed; variant: AmbientVariant; paused: boolean }) {
+const AmbientParticle = memo(function AmbientParticle({ particle, variant, paused }: { particle: ParticleSeed; variant: AmbientVariant; paused: boolean }) {
   const progress = useSharedValue(0);
   const fade = useSharedValue(0);
 
@@ -122,9 +122,9 @@ function AmbientParticle({ particle, variant, paused }: { particle: ParticleSeed
 
   const styles = useMemo(() => createParticleStyles(particle, variant), [particle, variant]);
   return <Animated.View style={[styles.particle, animatedStyle]} />;
-}
+});
 
-export function AmbientBackground({ variant, colors }: AmbientBackgroundProps) {
+export const AmbientBackground = memo(function AmbientBackground({ variant, colors }: AmbientBackgroundProps) {
   const [paused, setPaused] = useState(false);
   const particles = useMemo(() => buildParticles(variant, colors), [colors, variant]);
 
@@ -145,7 +145,7 @@ export function AmbientBackground({ variant, colors }: AmbientBackgroundProps) {
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface PillButtonProps {
@@ -12,7 +13,7 @@ interface PillButtonProps {
   disabled?: boolean;
 }
 
-export function PillButton({
+export const PillButton = memo(function PillButton({
   label,
   subtitle,
   icon,
@@ -23,7 +24,10 @@ export function PillButton({
   borderColor,
   disabled = false,
 }: PillButtonProps) {
-  const styles = createStyles(backgroundColor, textColor, shadowColor, borderColor, disabled);
+  const styles = useMemo(
+    () => createStyles(backgroundColor, textColor, shadowColor, borderColor, disabled),
+    [backgroundColor, borderColor, disabled, shadowColor, textColor],
+  );
 
   return (
     <Pressable style={styles.button} onPress={onPress} disabled={disabled}>
@@ -36,7 +40,7 @@ export function PillButton({
       </View>
     </Pressable>
   );
-}
+});
 
 function createStyles(
   backgroundColor: string,

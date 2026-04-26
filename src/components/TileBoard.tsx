@@ -1,9 +1,9 @@
 import { memo, useMemo } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
 
+import { MahjongTile } from '@/components/MahjongTile';
 import type { Tile } from '@/game/mahjongLogic';
 import type { WorldTheme } from '@/theme/worlds';
-import { MahjongTile } from '@/components/MahjongTile';
 
 interface TileBoardProps {
   tiles: Tile[];
@@ -24,7 +24,6 @@ interface TileMetrics {
   positions: Record<string, { left: number; top: number }>;
 }
 
-// ── Pure function — called only when layout or screen size changes ─────────────
 function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: number): TileMetrics {
   if (tiles.length === 0) {
     return { tileWidth: 52, tileHeight: 68, boardWidth: 52, boardHeight: 68, positions: {} };
@@ -71,9 +70,6 @@ function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: num
   return { tileWidth, tileHeight, boardWidth, boardHeight, positions };
 }
 
-// ── TileBoard wrapped in React.memo ───────────────────────────────────────────
-// React.memo here prevents re-render when parent game screen updates score/timer
-// but tiles / hintPairIds etc. haven't changed.
 export const TileBoard = memo(function TileBoard({
   tiles,
   worldTheme,
@@ -85,29 +81,41 @@ export const TileBoard = memo(function TileBoard({
   highlightedTileIds,
 }: TileBoardProps) {
   const { width, height } = useWindowDimensions();
+  const layoutKey =
+    tiles.length === 0 ? 'empty' : `${tiles.length}:${tiles[0]?.id ?? ''}:${tiles[tiles.length - 1]?.id ?? ''}`;
 
-  // Sort tiles for proper z-order — only when tiles array identity changes
-  const orderedTiles = useMemo(
+  const tileById = useMemo(() => {
+    const next: Record<string, Tile> = {};
+    for (const tile of tiles) {
+      next[tile.id] = tile;
+    }
+    return next;
+  }, [tiles]);
+
+  const orderedTileIds = useMemo(
     () =>
       [...tiles].sort((a, b) => {
         if (a.layer !== b.layer) return a.layer - b.layer;
         if (a.row !== b.row) return a.row - b.row;
         return a.col - b.col;
-      }),
-    [tiles],
+      }).map((tile) => tile.id),
+    // Re-sort only when a new level/layout is loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layoutKey],
   );
 
-  // Board metrics are expensive — memoize on tile identity + screen size only.
-  // Position of existing tiles never changes during a level.
-  // We use orderedTiles.length as an extra guard so a fresh level always
-  // recomputes (tiles is a new array reference, but belt-and-suspenders).
+  const orderedTiles = useMemo(
+    () => orderedTileIds.map((tileId) => tileById[tileId]).filter(Boolean),
+    [orderedTileIds, tileById],
+  );
+
   const metrics = useMemo(
     () => buildBoardMetrics(orderedTiles, width, height),
+    // Board geometry is static during a level.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orderedTiles.length, width, height],
+    [layoutKey, width, height],
   );
 
-  // Pre-build flat style objects once — avoids StyleSheet.create per frame
   const positionStyles = useMemo(
     () =>
       Object.fromEntries(
@@ -117,7 +125,7 @@ export const TileBoard = memo(function TileBoard({
             p: { position: 'absolute', left: pos.left, top: pos.top },
           }).p,
         ]),
-      ) as Record<string, ReturnType<typeof StyleSheet.create>['p']>,
+      ) as Record<string, ViewStyle>,
     [metrics.positions],
   );
 
@@ -133,6 +141,10 @@ export const TileBoard = memo(function TileBoard({
     [metrics.boardWidth, metrics.boardHeight],
   );
 
+  const hintIds = useMemo(() => new Set(hintPairIds ?? []), [hintPairIds]);
+  const mismatchIds = useMemo(() => new Set(mismatchTileIds), [mismatchTileIds]);
+  const highlightedIds = useMemo(() => new Set(highlightedTileIds), [highlightedTileIds]);
+
   if (orderedTiles.length === 0) {
     return <View style={emptyStyles.board} />;
   }
@@ -140,19 +152,12 @@ export const TileBoard = memo(function TileBoard({
   return (
     <View style={boardStyles.board}>
       {orderedTiles.map((tile, index) => {
-        // Compute per-tile derived booleans here so MahjongTile gets primitives —
-        // primitives are compared by value in memo comparator, not by reference.
-        const isHintActive = hintPairIds?.includes(tile.id) ?? false;
-        const isErrorActive = mismatchTileIds.includes(tile.id);
         const isThisBlocked = blockedTileId === tile.id;
-        const isHighlighted = highlightedTileIds.includes(tile.id);
 
         return (
           <View
             key={tile.id}
             style={positionStyles[tile.id]}
-            // Matched tiles: remove pointer events so invisible tiles
-            // don't swallow taps on newly-freed tiles (web + Android fix)
             pointerEvents={tile.isMatched ? 'none' : 'auto'}
           >
             <MahjongTile
@@ -162,12 +167,12 @@ export const TileBoard = memo(function TileBoard({
               onTap={onTap}
               tileWidth={metrics.tileWidth}
               tileHeight={metrics.tileHeight}
-              appearDelayMs={index * 24}
-              hintActive={isHintActive}
-              errorActive={isErrorActive}
+              appearDelayMs={Math.min(index * 12, 420)}
+              hintActive={hintIds.has(tile.id)}
+              errorActive={mismatchIds.has(tile.id)}
               blockedTapNonce={isThisBlocked ? blockedTapNonce : 0}
               isBlockedTile={isThisBlocked}
-              isHighlighted={isHighlighted}
+              isHighlighted={highlightedIds.has(tile.id)}
             />
           </View>
         );

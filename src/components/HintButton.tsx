@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { Text, Pressable, StyleSheet, View } from 'react-native';
 
 interface HintButtonProps {
@@ -9,7 +10,7 @@ interface HintButtonProps {
   disabled?: boolean;
 }
 
-export function HintButton({
+export const HintButton = memo(function HintButton({
   label,
   count,
   onPress,
@@ -17,7 +18,10 @@ export function HintButton({
   textColor,
   disabled = false,
 }: HintButtonProps) {
-  const styles = createStyles(accentColor, textColor, disabled);
+  const styles = useMemo(
+    () => createStyles(accentColor, textColor, disabled),
+    [accentColor, disabled, textColor],
+  );
 
   return (
     <Pressable style={styles.button} onPress={onPress} disabled={disabled}>
@@ -27,7 +31,7 @@ export function HintButton({
       </View>
     </Pressable>
   );
-}
+});
 
 function createStyles(accentColor: string, textColor: string, disabled: boolean) {
   return StyleSheet.create({
