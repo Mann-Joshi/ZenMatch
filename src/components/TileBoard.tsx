@@ -35,24 +35,31 @@ function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: num
     return { tileWidth, tileHeight, depthOffset, boardWidth: tileWidth, boardHeight: tileHeight, scale: 1, positions: {} };
   }
 
-  const ys = tiles.map((t) => t.y);
-  const xs = tiles.map((t) => t.x);
-  const maxZ = Math.max(...tiles.map((t) => t.z), 0);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
+  let minX = tiles[0].x;
+  let maxX = tiles[0].x;
+  let minY = tiles[0].y;
+  let maxY = tiles[0].y;
+  let maxZ = Math.max(tiles[0].z, 0);
+
+  for (let i = 1; i < tiles.length; i++) {
+    const tile = tiles[i];
+    if (tile.x < minX) minX = tile.x;
+    if (tile.x > maxX) maxX = tile.x;
+    if (tile.y < minY) minY = tile.y;
+    if (tile.y > maxY) maxY = tile.y;
+    if (tile.z > maxZ) maxZ = tile.z;
+  }
 
   const positions: Record<string, { left: number; top: number }> = {};
   const xOffset = tileWidth * 0.85;
   const yOffset = tileHeight * 0.85;
-  
-  tiles.forEach((tile) => {
+
+  for (const tile of tiles) {
     positions[tile.id] = {
       left: (tile.x - minX) * xOffset + tile.z * depthOffset,
       top: (tile.y - minY) * yOffset - tile.z * depthOffset,
     };
-  });
+  }
 
   const boardWidth = (maxX - minX) * xOffset + tileWidth + maxZ * depthOffset;
   const boardHeight = (maxY - minY) * yOffset + tileHeight + maxZ * depthOffset;
