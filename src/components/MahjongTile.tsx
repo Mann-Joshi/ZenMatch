@@ -24,9 +24,15 @@ const PARTICLE_COUNT = 6;
 const PARTICLE_INDICES = Array.from({ length: PARTICLE_COUNT }, (_, index) => index);
 
 interface MahjongTileProps {
+  id: string;
+  symbolKey: string;
+  x: number;
+  y: number;
+  z: number;
   tile: Tile;
   worldTheme: WorldTheme;
   isSelected: boolean;
+  isBlocked: boolean;
   onTap: (id: string) => void;
   tileWidth: number;
   tileHeight: number;
@@ -42,14 +48,10 @@ interface MahjongTileProps {
 const MatchParticle = memo(function MatchParticle({
   active,
   color,
-  tileWidth,
-  tileHeight,
   index,
 }: {
   active: boolean;
   color: string;
-  tileWidth: number;
-  tileHeight: number;
   index: number;
 }) {
   const travel = useSharedValue(0);
@@ -65,6 +67,8 @@ const MatchParticle = memo(function MatchParticle({
     opacity.value = withTiming(0, { duration: 520 });
   }, [active, opacity, travel]);
 
+  const tileWidth = 64;
+  const tileHeight = 80;
   const angle = (Math.PI * 2 * index) / PARTICLE_COUNT;
   const radius = Math.max(tileWidth, tileHeight) * 0.52;
 
@@ -78,8 +82,8 @@ const MatchParticle = memo(function MatchParticle({
   }));
 
   const styles = useMemo(
-    () => createParticleStyles(color, tileWidth, tileHeight),
-    [color, tileHeight, tileWidth],
+    () => createParticleStyles(color),
+    [color],
   );
   return <Animated.View style={[styles.particle, animatedStyle]} />;
 });
@@ -89,8 +93,14 @@ const MatchParticle = memo(function MatchParticle({
 export const MahjongTile = memo(
   function MahjongTile({
     tile,
+    id,
+    symbolKey,
+    x,
+    y,
+    z,
     worldTheme,
     isSelected,
+    isBlocked,
     onTap,
     tileWidth,
     tileHeight,
@@ -101,7 +111,7 @@ export const MahjongTile = memo(
     isBlockedTile,
     isHighlighted,
   }: MahjongTileProps) {
-    const face = getTileFace(tile.tileType);
+    const face = getTileFace(symbolKey);
     const scale = useSharedValue(0.8);
     const opacity = useSharedValue(tile.isMatched ? 0 : 1);
     const shake = useSharedValue(0);
@@ -128,9 +138,9 @@ export const MahjongTile = memo(
         return;
       }
       matchedProgress.value = withTiming(0, { duration: 180 });
-      opacity.value = withTiming(tile.isFree ? 1 : 0.65, { duration: 180 });
+      opacity.value = withTiming(isBlocked ? 0.56 : 1, { duration: 180 });
       scale.value = withSpring(isSelected ? 1.08 : 1, { damping: 12, stiffness: 180 });
-    }, [isSelected, matchedProgress, opacity, scale, tile.isFree, tile.isMatched]);
+    }, [isBlocked, isSelected, matchedProgress, opacity, scale, tile.isMatched]);
 
     // ── Selection glow ────────────────────────────────────────────────────────
     useEffect(() => {
@@ -184,7 +194,7 @@ export const MahjongTile = memo(
       return {
         opacity: opacity.value,
         transform: [{ translateX: shake.value }, { scale: scale.value }],
-        shadowOpacity: interpolate(activeGlow, [0, 1], [0.12, 0.42]),
+        shadowOpacity: interpolate(activeGlow, [0, 1], [0.6, 1.0]),
       };
     });
 
@@ -194,14 +204,14 @@ export const MahjongTile = memo(
 
     const styles = useMemo(
       () =>
-        createStyles(worldTheme, tileWidth, tileHeight, isSelected, isHighlighted, face.accentColor),
-      [face.accentColor, isHighlighted, isSelected, tileHeight, tileWidth, worldTheme],
+        createStyles(worldTheme, isSelected, isHighlighted, face.accentColor),
+      [face.accentColor, isHighlighted, isSelected, worldTheme],
     );
 
     // Stable onPress callback — avoids referential inequality on every render
     const handlePress = useCallback(() => {
-      onTap(tile.id);
-    }, [onTap, tile.id]);
+      onTap(id);
+    }, [id, onTap]);
 
     return (
       // react-native-gesture-handler TouchableOpacity runs on native thread
@@ -212,27 +222,30 @@ export const MahjongTile = memo(
         style={styles.pressable}
       >
         <Animated.View style={[styles.tileShell, animatedStyle]}>
-          <View style={styles.rightEdge} />
-          <View style={styles.bottomEdge} />
-          <View style={styles.face}>
-            {TILE_IMAGES[tile.tileType] != null ? (
+          <Image
+            source={require('../../assets/images/64/tile.png')}
+            style={styles.tileBgImage}
+            fadeDuration={0}
+          />
+          <View style={styles.symbolLayer} pointerEvents="none">
+            {TILE_IMAGES[symbolKey] != null ? (
               <Image
-                source={TILE_IMAGES[tile.tileType]}
-                style={styles.tileImage}
+                source={TILE_IMAGES[symbolKey]}
+                style={styles.symbolImage}
                 resizeMode="contain"
-                fadeDuration={0}          // critical: prevents Android fade jank
+                fadeDuration={0}
               />
             ) : (
-              <>
-                <Text style={styles.symbol}>{face.centerSymbol}</Text>
-                <Text style={styles.title}>{face.displayName}</Text>
-                <Text style={styles.label}>{face.suitLabel}</Text>
-              </>
+            <View style={styles.textFallback}>
+              <Text style={styles.symbol}>{face.centerSymbol}</Text>
+              <Text style={styles.title}>{face.displayName}</Text>
+              <Text style={styles.label}>{face.suitLabel}</Text>
+            </View>
             )}
           </View>
-          <Animated.View style={[styles.errorOverlay, errorOverlayStyle]} />
+          <Animated.View style={[styles.errorOverlay, errorOverlayStyle]} pointerEvents="none" />
           {!tile.isFree && !tile.isMatched ? (
-            <View style={styles.blockedOverlay} />
+            <View style={styles.blockedOverlay} pointerEvents="none" />
           ) : null}
           {/* Pre-rendered particles — 6 pieces, hidden when inactive */}
           {PARTICLE_INDICES.map((index) => (
@@ -240,8 +253,6 @@ export const MahjongTile = memo(
               key={`${tile.id}-p-${index}`}
               active={tile.isMatched}
               color={worldTheme.particleColors[index % worldTheme.particleColors.length]}
-              tileWidth={tileWidth}
-              tileHeight={tileHeight}
               index={index}
             />
           ))}
@@ -254,18 +265,19 @@ export const MahjongTile = memo(
   (prev, next) => {
     return (
       prev.tile.isMatched === next.tile.isMatched &&
-      prev.tile.isFree === next.tile.isFree &&
-      prev.tile.tileType === next.tile.tileType &&
-      prev.tile.id === next.tile.id &&
+      prev.id === next.id &&
+      prev.symbolKey === next.symbolKey &&
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.z === next.z &&
       prev.worldTheme.id === next.worldTheme.id &&
       prev.isSelected === next.isSelected &&
+      prev.isBlocked === next.isBlocked &&
       prev.isHighlighted === next.isHighlighted &&
       prev.hintActive === next.hintActive &&
       prev.errorActive === next.errorActive &&
       prev.isBlockedTile === next.isBlockedTile &&
       prev.blockedTapNonce === next.blockedTapNonce &&
-      prev.tileWidth === next.tileWidth &&
-      prev.tileHeight === next.tileHeight &&
       prev.appearDelayMs === next.appearDelayMs
     );
   },
@@ -274,99 +286,84 @@ export const MahjongTile = memo(
 // ── Styles ────────────────────────────────────────────────────────────────────
 function createStyles(
   worldTheme: WorldTheme,
-  tileWidth: number,
-  tileHeight: number,
   isSelected: boolean,
   isHighlighted: boolean,
   symbolColor: string,
 ) {
-  const depth = Math.max(4, tileWidth * 0.08);
-
   return StyleSheet.create({
     pressable: {
-      width: tileWidth + depth,
-      height: tileHeight + depth,
+      width: 64,
+      height: 80,
     },
     tileShell: {
-      width: tileWidth + depth,
-      height: tileHeight + depth,
-      shadowColor: worldTheme.accentColor,
-      shadowRadius: 14,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 6,
-    },
-    rightEdge: {
-      position: 'absolute',
-      right: 0,
-      top: depth,
-      width: depth,
-      height: tileHeight - depth,
-      borderTopRightRadius: 11,
-      borderBottomRightRadius: 11,
-      backgroundColor: worldTheme.tileShadow,
-    },
-    bottomEdge: {
-      position: 'absolute',
-      left: depth,
-      bottom: 0,
-      width: tileWidth - depth,
-      height: depth,
-      borderBottomLeftRadius: 11,
-      borderBottomRightRadius: 11,
-      backgroundColor: worldTheme.tileShadow,
-    },
-    face: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      width: tileWidth,
-      height: tileHeight,
-      borderRadius: 14,
-      borderWidth: isSelected || isHighlighted ? 2 : 1,
+      width: 64,
+      height: 80,
+      shadowColor: '#000000',
+      shadowOpacity: 0.8,
+      shadowRadius: 5,
+      shadowOffset: { width: -3, height: 5 },
+      elevation: 7,
+      borderWidth: isSelected || isHighlighted ? 2 : 0,
       borderColor: isSelected
         ? worldTheme.accentColor
         : isHighlighted
           ? `${worldTheme.accentColor}99`
-          : '#D4C5B0',
-      backgroundColor: worldTheme.tileBackground,
-      paddingHorizontal: 6,
-      paddingTop: 8,
-      paddingBottom: 6,
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      overflow: 'hidden',
+          : 'transparent',
+      borderRadius: 14, // Assuming the tile bg still warrants some rounded corners for the overlay
     },
-    tileImage: {
-      width: tileWidth,
-      height: tileHeight,
-      borderRadius: 14,
+    tileBgImage: {
+      position: 'absolute',
+      width: 64,
+      height: 80,
+      resizeMode: 'contain',
+    },
+    symbolLayer: {
+      position: 'absolute',
+      width: '100%',
+      height: '100%',
+    },
+    symbolImage: {
+      position: 'absolute',
+      width: '60%',
+      height: '60%',
+      top: '20%',
+      left: '20%',
+      resizeMode: 'contain',
+    },
+    textFallback: {
+      position: 'absolute',
+      width: '60%',
+      height: '60%',
+      top: '20%',
+      left: '20%',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     blockedOverlay: {
       position: 'absolute',
       left: 0,
       top: 0,
-      width: tileWidth,
-      height: tileHeight,
+      width: 64,
+      height: 80,
       borderRadius: 14,
       backgroundColor: 'rgba(0,0,0,0.22)',
     },
     symbol: {
       color: symbolColor,
-      fontSize: Math.max(20, tileWidth * 0.52),
+      fontSize: 26,
       fontWeight: '700',
-      lineHeight: Math.max(22, tileWidth * 0.56),
       fontFamily: 'serif',
     },
     title: {
       color: '#47506A',
-      fontSize: Math.max(7, tileWidth * 0.12),
+      fontSize: 8,
       textAlign: 'center',
       fontWeight: '600',
     },
     label: {
       alignSelf: 'flex-end',
       color: '#6B665E',
-      fontSize: Math.max(8, tileWidth * 0.16),
+      fontSize: 8,
       fontWeight: '800',
       letterSpacing: 0.6,
     },
@@ -374,22 +371,22 @@ function createStyles(
       position: 'absolute',
       left: 0,
       top: 0,
-      width: tileWidth,
-      height: tileHeight,
+      width: 64,
+      height: 80,
       borderRadius: 14,
       backgroundColor: '#C62828',
     },
   });
 }
 
-function createParticleStyles(color: string, tileWidth: number, tileHeight: number) {
+function createParticleStyles(color: string) {
   return StyleSheet.create({
     particle: {
       position: 'absolute',
-      left: tileWidth * 0.46,
-      top: tileHeight * 0.46,
-      width: Math.max(4, tileWidth * 0.08),
-      height: Math.max(4, tileWidth * 0.08),
+      left: 32,
+      top: 40,
+      width: 6,
+      height: 6,
       borderRadius: 999,
       backgroundColor: color,
     },

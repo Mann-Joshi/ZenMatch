@@ -306,7 +306,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
         tiles,
         selectedTileId: tileId,
         blockedTileId: null,
-        highlightedTileIds: computeHighlightedIds(tiles, tappedTile),
+        highlightedTileIds: [],
       });
       void playSfx('tile_select');
       void hapticTileSelect();

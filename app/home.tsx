@@ -19,14 +19,17 @@ import { getAppPalette } from '@/theme/worlds';
 export default function HomeScreen() {
   const streakDays = useProgressStore((state) => state.streakDays);
   const bankedHints = useProgressStore((state) => state.bankedHints);
+  const currentLevel = useProgressStore((state) => state.currentLevel);
+  const hydrateCurrentLevel = useProgressStore((state) => state.hydrateCurrentLevel);
   const appearanceMode = useSettingsStore((state) => state.appearanceMode);
   const palette = getAppPalette(appearanceMode);
   const pulse = useSharedValue(0);
   const ambientColors = appearanceMode === 'dark' ? ['#F0EDE6', '#D3B56A', '#FFFFFF'] : ['#D8C9AE', '#B48C5A', '#F0EDE6'];
 
   useEffect(() => {
+    void hydrateCurrentLevel();
     pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }), -1, true);
-  }, [pulse]);
+  }, [hydrateCurrentLevel, pulse]);
 
   const styles = useMemo(() => createStyles(palette), [palette]);
   const pulseStyle = useAnimatedStyle(() => ({
@@ -51,8 +54,8 @@ export default function HomeScreen() {
         <Animated.View style={[styles.playWrap, pulseStyle]}>
           <PillButton
             label="PLAY"
-            subtitle="Resume with World 1"
-            onPress={() => router.push('/game/1/1')}
+            subtitle={`Resume Level ${currentLevel}`}
+            onPress={() => router.push(`/game/1/${currentLevel}`)}
             backgroundColor="#F0EDE6"
             textColor="#0A0F1E"
             shadowColor="#000000"

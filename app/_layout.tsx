@@ -6,17 +6,20 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useProgressStore } from '@/store/progressStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { primeAudioEngine, startMusic, stopMusic } from '@/utils/audio';
 
 export default function RootLayout() {
   const appearanceMode = useSettingsStore((state) => state.appearanceMode);
   const musicEnabled = useSettingsStore((state) => state.musicEnabled);
+  const hydrateCurrentLevel = useProgressStore((state) => state.hydrateCurrentLevel);
 
   // Prime the audio engine once on mount
   useEffect(() => {
     void primeAudioEngine();
-  }, []);
+    void hydrateCurrentLevel();
+  }, [hydrateCurrentLevel]);
 
   // Update system UI background color when appearance changes
   useEffect(() => {

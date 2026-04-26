@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { writeSecureValue } from '@/utils/storage';
 
 interface ProgressState {
+  currentLevel: number;
   levelStars: Record<string, number>;
   bestScores: Record<string, number>;
   worldUnlocked: number[];
@@ -17,6 +18,7 @@ interface ProgressState {
   lastClaimedDay: number;
   /** ISO date string of last daily reward claim (used to prevent double-claiming per day). */
   lastRewardClaimDate: string;
+  hydrateCurrentLevel: () => Promise<void>;
   getTotalStars: () => number;
   recordLevelResult: (world: number, level: number, stars: number, score: number) => void;
   completeDailyChallenge: (playedDate: string) => void;
@@ -47,6 +49,7 @@ export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
       levelStars: {},
+      currentLevel: 1,
       bestScores: {},
       worldUnlocked: [1],
       streakDays: 0,
@@ -56,6 +59,11 @@ export const useProgressStore = create<ProgressState>()(
       bankedShuffles: 0,
       lastClaimedDay: -1,
       lastRewardClaimDate: '',
+      hydrateCurrentLevel: async () => {
+        const savedLevel = await AsyncStorage.getItem('currentLevel');
+        const parsedLevel = Number(savedLevel);
+        set({ currentLevel: Number.isFinite(parsedLevel) && parsedLevel > 0 ? parsedLevel : 1 });
+      },
       getTotalStars: () => Object.values(get().levelStars).reduce((sum, value) => sum + value, 0),
       recordLevelResult: (world, level, stars, score) =>
         set((state) => {
@@ -73,7 +81,11 @@ export const useProgressStore = create<ProgressState>()(
             }
           }
 
+          const currentLevel = Math.max(state.currentLevel, level + 1);
+          void AsyncStorage.setItem('currentLevel', String(currentLevel));
+
           return {
+            currentLevel,
             levelStars,
             bestScores,
             worldUnlocked: [...new Set(worldUnlocked)].sort((left, right) => left - right),

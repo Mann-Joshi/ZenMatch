@@ -1,4 +1,4 @@
-import { computeFreeTiles, findAvailablePairs, type Tile } from '@/game/mahjongLogic';
+import { computeFreeTiles, findAvailablePairs, getTileGroup, type Tile } from '@/game/mahjongLogic';
 import { shuffleArray, type SeedInput } from '@/utils/random';
 
 export function shuffleBoard(tiles: Tile[], seed: SeedInput): Tile[] {
@@ -23,6 +23,8 @@ export function shuffleBoard(tiles: Tile[], seed: SeedInput): Tile[] {
       const nextTile = {
         ...tile,
         tileType: shuffledTypes[typeIndex],
+        symbolKey: shuffledTypes[typeIndex],
+        group: getTileGroup(shuffledTypes[typeIndex]),
         isSelected: false,
       };
 
@@ -39,4 +41,3 @@ export function shuffleBoard(tiles: Tile[], seed: SeedInput): Tile[] {
 
   return candidateTiles;
 }
-

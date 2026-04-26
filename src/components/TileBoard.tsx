@@ -19,55 +19,49 @@ interface TileBoardProps {
 interface TileMetrics {
   tileWidth: number;
   tileHeight: number;
+  depthOffset: number;
   boardWidth: number;
   boardHeight: number;
+  scale: number;
   positions: Record<string, { left: number; top: number }>;
 }
 
 function buildBoardMetrics(tiles: Tile[], screenWidth: number, screenHeight: number): TileMetrics {
+  const tileWidth = 64;
+  const tileHeight = 80;
+  const depthOffset = 6;
+
   if (tiles.length === 0) {
-    return { tileWidth: 52, tileHeight: 68, boardWidth: 52, boardHeight: 68, positions: {} };
+    return { tileWidth, tileHeight, depthOffset, boardWidth: tileWidth, boardHeight: tileHeight, scale: 1, positions: {} };
   }
 
-  const rows = tiles.map((t) => t.row);
-  const cols = tiles.map((t) => t.col);
-  const maxLayer = Math.max(...tiles.map((t) => t.layer), 0);
-  const minRow = Math.min(...rows);
-  const maxRow = Math.max(...rows);
-  const minCol = Math.min(...cols);
-  const maxCol = Math.max(...cols);
-
-  const availableWidth = screenWidth * 0.9;
-  const availableHeight = screenHeight * 0.58;
-  const widthUnits = Math.max(1, (maxCol - minCol) * 0.5 + 1.4);
-  const heightUnits = Math.max(1, (maxRow - minRow) * 0.76 + 1.3);
-  const tileWidth = Math.max(
-    28,
-    Math.min(
-      52,
-      availableWidth / (widthUnits + maxLayer * 0.18),
-      (availableHeight / (heightUnits + maxLayer * 0.08)) * 0.76,
-    ),
-  );
-  const tileHeight = tileWidth * (68 / 52);
-  const halfStep = (tileWidth + tileWidth * 0.08) / 2;
-  const rowStep = tileHeight * 0.72;
-  const layerOffset = tileWidth * (4 / 52);
+  const ys = tiles.map((t) => t.y);
+  const xs = tiles.map((t) => t.x);
+  const maxZ = Math.max(...tiles.map((t) => t.z), 0);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
 
   const positions: Record<string, { left: number; top: number }> = {};
+  const xOffset = tileWidth * 0.85;
+  const yOffset = tileHeight * 0.85;
+  
   tiles.forEach((tile) => {
     positions[tile.id] = {
-      left: (tile.col - minCol) * halfStep + tile.layer * layerOffset,
-      top: (tile.row - minRow) * rowStep - tile.layer * layerOffset,
+      left: (tile.x - minX) * xOffset + tile.z * depthOffset,
+      top: (tile.y - minY) * yOffset - tile.z * depthOffset,
     };
   });
 
-  const boardWidth =
-    (maxCol - minCol) * halfStep + tileWidth + maxLayer * layerOffset + tileWidth * 0.08;
-  const boardHeight =
-    (maxRow - minRow) * rowStep + tileHeight + maxLayer * layerOffset + tileWidth * 0.08;
+  const boardWidth = (maxX - minX) * xOffset + tileWidth + maxZ * depthOffset;
+  const boardHeight = (maxY - minY) * yOffset + tileHeight + maxZ * depthOffset;
 
-  return { tileWidth, tileHeight, boardWidth, boardHeight, positions };
+  const availableWidth = screenWidth * 0.96;
+  const availableHeight = screenHeight * 0.65;
+  const scale = Math.min(1, availableWidth / boardWidth, availableHeight / boardHeight);
+
+  return { tileWidth, tileHeight, depthOffset, boardWidth, boardHeight, scale, positions };
 }
 
 export const TileBoard = memo(function TileBoard({
@@ -95,9 +89,9 @@ export const TileBoard = memo(function TileBoard({
   const orderedTileIds = useMemo(
     () =>
       [...tiles].sort((a, b) => {
-        if (a.layer !== b.layer) return a.layer - b.layer;
-        if (a.row !== b.row) return a.row - b.row;
-        return a.col - b.col;
+        if (a.z !== b.z) return a.z - b.z;
+        if (a.y !== b.y) return a.y - b.y;
+        return a.x - b.x;
       }).map((tile) => tile.id),
     // Re-sort only when a new level/layout is loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,9 +130,10 @@ export const TileBoard = memo(function TileBoard({
           width: metrics.boardWidth,
           height: metrics.boardHeight,
           alignSelf: 'center' as const,
+          transform: [{ scale: metrics.scale }],
         },
       }),
-    [metrics.boardWidth, metrics.boardHeight],
+    [metrics.boardWidth, metrics.boardHeight, metrics.scale],
   );
 
   const hintIds = useMemo(() => new Set(hintPairIds ?? []), [hintPairIds]);
@@ -161,9 +156,15 @@ export const TileBoard = memo(function TileBoard({
             pointerEvents={tile.isMatched ? 'none' : 'auto'}
           >
             <MahjongTile
+              id={tile.id}
+              symbolKey={tile.symbolKey}
+              x={tile.x}
+              y={tile.y}
+              z={tile.z}
               tile={tile}
               worldTheme={worldTheme}
               isSelected={tile.isSelected}
+              isBlocked={!tile.isFree && !tile.isMatched}
               onTap={onTap}
               tileWidth={metrics.tileWidth}
               tileHeight={metrics.tileHeight}

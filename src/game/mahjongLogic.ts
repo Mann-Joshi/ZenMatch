@@ -1,6 +1,11 @@
 export interface Tile {
   id: string;
   tileType: string;
+  symbolKey: string;
+  group?: 'flower' | 'season';
+  x: number;
+  y: number;
+  z: number;
   layer: number;
   row: number;
   col: number;
@@ -22,22 +27,26 @@ function isTileActive(tile: Tile): boolean {
   return !tile.isMatched;
 }
 
-function isSeasonTile(tileType: string): boolean {
-  return tileType.startsWith('season_');
+export function getTileGroup(symbolKey: string): Tile['group'] {
+  if (symbolKey.startsWith('flower_')) {
+    return 'flower';
+  }
+
+  if (symbolKey.startsWith('season_')) {
+    return 'season';
+  }
+
+  return undefined;
 }
 
-function isFlowerTile(tileType: string): boolean {
-  return tileType.startsWith('flower_');
+function getPositionKey(y: number, x: number): string {
+  return `${Math.round(y * POSITION_SCALE)}:${Math.round(x * POSITION_SCALE)}`;
 }
 
-function getPositionKey(row: number, col: number): string {
-  return `${Math.round(row * POSITION_SCALE)}:${Math.round(col * POSITION_SCALE)}`;
-}
-
-function getScaledPosition(tile: Tile): { row: number; col: number } {
+function getScaledPosition(tile: Tile): { y: number; x: number } {
   return {
-    row: Math.round(tile.row * POSITION_SCALE),
-    col: Math.round(tile.col * POSITION_SCALE),
+    y: Math.round(tile.y * POSITION_SCALE),
+    x: Math.round(tile.x * POSITION_SCALE),
   };
 }
 
@@ -49,7 +58,7 @@ function buildTileBuckets(tiles: Tile[]): TileBuckets {
       continue;
     }
 
-    const key = getPositionKey(tile.row, tile.col);
+    const key = getPositionKey(tile.y, tile.x);
     const bucket = buckets.get(key);
     if (bucket) {
       bucket.push(tile);
@@ -63,13 +72,13 @@ function buildTileBuckets(tiles: Tile[]): TileBuckets {
 
 function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, colRadius: number): Tile[] {
   const center = getScaledPosition(tile);
-  const rowSteps = Math.ceil(rowRadius * POSITION_SCALE);
-  const colSteps = Math.ceil(colRadius * POSITION_SCALE);
+  const ySteps = Math.ceil(rowRadius * POSITION_SCALE);
+  const xSteps = Math.ceil(colRadius * POSITION_SCALE);
   const candidates: Tile[] = [];
 
-  for (let row = center.row - rowSteps; row <= center.row + rowSteps; row += 1) {
-    for (let col = center.col - colSteps; col <= center.col + colSteps; col += 1) {
-      const bucket = buckets.get(`${row}:${col}`);
+  for (let y = center.y - ySteps; y <= center.y + ySteps; y += 1) {
+    for (let x = center.x - xSteps; x <= center.x + xSteps; x += 1) {
+      const bucket = buckets.get(`${y}:${x}`);
       if (bucket) {
         candidates.push(...bucket);
       }
@@ -80,23 +89,23 @@ function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, col
 }
 
 function hasTopBlocker(tile: Tile, buckets: TileBuckets): boolean {
-  return getNearbyTiles(tile, buckets, TOP_OVERLAP_ROW, TOP_OVERLAP_COL).some(
+  return getNearbyTiles(tile, buckets, 0, 0).some(
     (candidate) =>
       candidate.id !== tile.id &&
-      candidate.layer > tile.layer &&
-      Math.abs(candidate.row - tile.row) <= TOP_OVERLAP_ROW &&
-      Math.abs(candidate.col - tile.col) <= TOP_OVERLAP_COL,
+      candidate.z > tile.z &&
+      candidate.x === tile.x &&
+      candidate.y === tile.y,
   );
 }
 
 function hasSideBlocker(tile: Tile, buckets: TileBuckets, direction: 'left' | 'right'): boolean {
   return getNearbyTiles(tile, buckets, SIDE_OVERLAP_ROW, SIDE_OVERLAP_COL).some((candidate) => {
-    if (candidate.id === tile.id || !isTileActive(candidate) || candidate.layer !== tile.layer) {
+    if (candidate.id === tile.id || !isTileActive(candidate) || candidate.z !== tile.z) {
       return false;
     }
 
-    const rowOverlap = Math.abs(candidate.row - tile.row) <= SIDE_OVERLAP_ROW;
-    const columnDistance = candidate.col - tile.col;
+    const rowOverlap = Math.abs(candidate.y - tile.y) <= SIDE_OVERLAP_ROW;
+    const columnDistance = candidate.x - tile.x;
     const blocksLeft = direction === 'left' && columnDistance < -SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL;
     const blocksRight = direction === 'right' && columnDistance > SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL;
     return rowOverlap && (blocksLeft || blocksRight);
@@ -136,19 +145,18 @@ export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
     return false;
   }
 
-  if (tileA.tileType === tileB.tileType) {
+  const groupA = tileA.group ?? getTileGroup(tileA.symbolKey ?? tileA.tileType);
+  const groupB = tileB.group ?? getTileGroup(tileB.symbolKey ?? tileB.tileType);
+
+  if (groupA === 'flower' && groupB === 'flower') {
     return true;
   }
 
-  if (isSeasonTile(tileA.tileType) && isSeasonTile(tileB.tileType)) {
+  if (groupA === 'season' && groupB === 'season') {
     return true;
   }
 
-  if (isFlowerTile(tileA.tileType) && isFlowerTile(tileB.tileType)) {
-    return true;
-  }
-
-  return false;
+  return (tileA.symbolKey ?? tileA.tileType) === (tileB.symbolKey ?? tileB.tileType);
 }
 
 export function findAvailablePairs(tiles: Tile[]): [string, string][] {

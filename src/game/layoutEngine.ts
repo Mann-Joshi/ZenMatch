@@ -5,7 +5,7 @@ import pyramidLayout from '@/data/layouts/pyramid.json';
 import towerLayout from '@/data/layouts/tower.json';
 import turtleLayout from '@/data/layouts/turtle.json';
 import { getShuffledPairTypes } from '@/data/tilesets/standard';
-import { computeFreeTiles, type Tile } from '@/game/mahjongLogic';
+import { computeFreeTiles, getTileGroup, type Tile } from '@/game/mahjongLogic';
 import { createSeededRandom, type SeedInput } from '@/utils/random';
 
 export interface TilePosition {
@@ -235,6 +235,11 @@ export function buildBoardTiles(layout: BoardLayout, seed: SeedInput): Tile[] {
   let active: Tile[] = positions.map((pos, i) => ({
     id: String(i),
     tileType: '__placeholder__',
+    symbolKey: '__placeholder__',
+    group: undefined,
+    x: pos.col,
+    y: pos.row,
+    z: pos.layer,
     layer: pos.layer,
     row: pos.row,
     col: pos.col,
@@ -285,6 +290,11 @@ export function buildBoardTiles(layout: BoardLayout, seed: SeedInput): Tile[] {
   const finalTiles: Tile[] = positions.map((pos, i) => ({
     id: `${layout.id}-${seed}-${i}`,
     tileType: assignment[i],
+    symbolKey: assignment[i],
+    group: getTileGroup(assignment[i]),
+    x: pos.col,
+    y: pos.row,
+    z: pos.layer,
     layer: pos.layer,
     row: pos.row,
     col: pos.col,
