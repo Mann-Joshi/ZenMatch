@@ -163,10 +163,34 @@ export function findAvailablePairs(tiles: Tile[]): [string, string][] {
   const computedTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched);
   const pairs: [string, string][] = [];
 
-  for (let left = 0; left < computedTiles.length; left += 1) {
-    for (let right = left + 1; right < computedTiles.length; right += 1) {
-      if (areTilesMatching(computedTiles[left], computedTiles[right])) {
-        pairs.push([computedTiles[left].id, computedTiles[right].id]);
+  const buckets = new Map<string, Tile[]>();
+
+  for (const tile of computedTiles) {
+    const group = tile.group ?? getTileGroup(tile.symbolKey ?? tile.tileType);
+    let key: string;
+
+    if (group === 'flower') {
+      key = 'group:flower';
+    } else if (group === 'season') {
+      key = 'group:season';
+    } else {
+      key = `exact:${tile.symbolKey ?? tile.tileType}`;
+    }
+
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(tile);
+    } else {
+      buckets.set(key, [tile]);
+    }
+  }
+
+  for (const bucket of buckets.values()) {
+    for (let i = 0; i < bucket.length; i += 1) {
+      for (let j = i + 1; j < bucket.length; j += 1) {
+        if (bucket[i].id !== bucket[j].id) {
+          pairs.push([bucket[i].id, bucket[j].id]);
+        }
       }
     }
   }
