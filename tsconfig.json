@@ -10,7 +10,7 @@
     },
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
-    "types": [
+    "types": ["jest",
       "expo-router/types"
     ]
   },
