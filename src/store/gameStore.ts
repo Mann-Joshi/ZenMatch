@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 
 import { buildBoardTiles, getLevelBlueprint, materializeLayout, type BoardLayout } from '@/game/layoutEngine';
 import {
@@ -116,6 +116,130 @@ function computeHighlightedIds(tiles: Tile[], selectedTile: Tile): string[] {
   return freeTiles
     .filter((t) => areTilesMatching(selectedTile, t))
     .map((t) => t.id);
+}
+
+
+type GetState = StoreApi<GameState>['getState'];
+type SetState = StoreApi<GameState>['setState'];
+
+function handleBlockedTile(set: SetState, tileId: string) {
+  set((current) => ({
+    blockedTileId: tileId,
+    blockedTapNonce: current.blockedTapNonce + 1,
+  }));
+  void playSfx('tile_no_match');
+  void hapticNoMatch();
+}
+
+function handleInitialSelection(set: SetState, state: GameState, tileId: string) {
+  const tiles = setSelectedTile(state.tiles, tileId);
+  set({
+    tiles,
+    selectedTileId: tileId,
+    blockedTileId: null,
+    highlightedTileIds: [],
+  });
+  void playSfx('tile_select');
+  void hapticTileSelect();
+}
+
+function handleDeselection(set: SetState, state: GameState) {
+  set({
+    tiles: setSelectedTile(state.tiles, null),
+    selectedTileId: null,
+    highlightedTileIds: [],
+  });
+}
+
+function handleMatch(set: SetState, state: GameState, selectedTile: Tile, tappedTile: Tile) {
+  const now = Date.now();
+  const timeSinceLast = state.lastMatchTimestamp > 0 ? now - state.lastMatchTimestamp : 9999;
+  const newMultiplier = getNewComboMultiplier(state.comboMultiplier, timeSinceLast);
+  const newComboCount = timeSinceLast <= 3000 ? state.comboCount + 1 : 1;
+  const matchPoints = calculateMatchScore(100, newMultiplier);
+  const newScore = state.score + matchPoints;
+
+  const nextTiles = computeFreeTiles(
+    state.tiles.map((tile) => {
+      if (tile.id === selectedTile.id || tile.id === tappedTile.id) {
+        return { ...tile, isMatched: true, isSelected: false, isFree: false };
+      }
+
+      return tile.isSelected ? { ...tile, isSelected: false } : tile;
+    }),
+  );
+  const nextMatchedPairs = state.matchedPairs + 1;
+  const nextCleared = isBoardCleared(nextTiles);
+  const nextStuck = !nextCleared && isBoardStuck(nextTiles);
+  const timeRemaining = state.timeLimitSeconds ? Math.max(0, state.timeLimitSeconds - state.timeElapsed) : 0;
+
+  const finalScore = nextCleared
+    ? calculateFinalScore(newScore, timeRemaining, state.hintsUsed, state.reshufflesUsed, state.undosUsed, true)
+    : newScore;
+
+  set({
+    tiles: nextTiles,
+    selectedTileId: null,
+    matchedPairs: nextMatchedPairs,
+    isLevelComplete: nextCleared,
+    isBoardStuck: nextStuck,
+    moves: state.moves + 1,
+    undoStack: [...state.undoStack, { tileIds: [selectedTile.id, tappedTile.id] }],
+    hintPairIds: null,
+    blockedTileId: null,
+    mismatchTileIds: [],
+    highlightedTileIds: [],
+    lastMatchTimestamp: now,
+    comboCount: newComboCount,
+    comboMultiplier: newMultiplier,
+    score: newScore,
+    finalScore,
+    isTimerRunning: !nextCleared,
+  });
+
+  void (async () => {
+    await playSfx(newComboCount >= 3 ? 'combo' : 'tile_match');
+    await hapticTileMatch();
+
+    if (nextCleared) {
+      await playSfx('level_complete');
+      await hapticLevelComplete();
+    } else if (nextStuck) {
+      await playSfx('board_stuck');
+      await hapticBoardStuck();
+    }
+  })();
+}
+
+function handleMismatch(set: SetState, get: GetState, state: GameState, selectedTile: Tile, tappedTile: Tile) {
+  const nextHearts = state.hearts - 1;
+  const isGameOver = nextHearts <= 0;
+
+  set({
+    tiles: setSelectedTile(state.tiles, null),
+    selectedTileId: null,
+    mismatchTileIds: [selectedTile.id, tappedTile.id],
+    blockedTileId: null,
+    highlightedTileIds: [],
+    hearts: nextHearts,
+    isGameOver,
+    isTimerRunning: !isGameOver,
+    // Mismatch resets combo
+    comboCount: 0,
+    comboMultiplier: 1.0,
+  });
+
+  void playSfx('tile_no_match');
+  void hapticNoMatch();
+  if (mismatchClearTimeout) {
+    clearTimeout(mismatchClearTimeout);
+  }
+  mismatchClearTimeout = setTimeout(() => {
+    if (get().selectedTileId === null) {
+      set({ mismatchTileIds: [] });
+    }
+    mismatchClearTimeout = null;
+  }, 420);
 }
 
 export const useGameStore = create<GameState>()((set, get) => ({
@@ -290,141 +414,31 @@ export const useGameStore = create<GameState>()((set, get) => ({
     }
 
     if (!tappedTile.isFree) {
-      set((current) => ({
-        blockedTileId: tileId,
-        blockedTapNonce: current.blockedTapNonce + 1,
-      }));
-      void playSfx('tile_no_match');
-      void hapticNoMatch();
+      handleBlockedTile(set, tileId);
       return;
     }
 
-    // ── No tile selected yet — select this one ───────────────────────────
     if (!state.selectedTileId) {
-      const tiles = setSelectedTile(state.tiles, tileId);
-      set({
-        tiles,
-        selectedTileId: tileId,
-        blockedTileId: null,
-        highlightedTileIds: [],
-      });
-      void playSfx('tile_select');
-      void hapticTileSelect();
+      handleInitialSelection(set, state, tileId);
       return;
     }
 
-    // ── Tap same tile again → deselect ───────────────────────────────────
     if (state.selectedTileId === tileId) {
-      set({
-        tiles: setSelectedTile(state.tiles, null),
-        selectedTileId: null,
-        highlightedTileIds: [],
-      });
+      handleDeselection(set, state);
       return;
     }
 
     const selectedTile = state.tiles.find((tile) => tile.id === state.selectedTileId);
     if (!selectedTile) {
-      set({
-        selectedTileId: null,
-        tiles: setSelectedTile(state.tiles, null),
-        highlightedTileIds: [],
-      });
+      handleDeselection(set, state);
       return;
     }
 
-    // ── MATCH ─────────────────────────────────────────────────────────────
     if (areTilesMatching(selectedTile, tappedTile)) {
-      const now = Date.now();
-      const timeSinceLast = state.lastMatchTimestamp > 0 ? now - state.lastMatchTimestamp : 9999;
-      const newMultiplier = getNewComboMultiplier(state.comboMultiplier, timeSinceLast);
-      const newComboCount = timeSinceLast <= 3000 ? state.comboCount + 1 : 1;
-      const matchPoints = calculateMatchScore(100, newMultiplier);
-      const newScore = state.score + matchPoints;
-
-      const nextTiles = computeFreeTiles(
-        state.tiles.map((tile) => {
-          if (tile.id === selectedTile.id || tile.id === tappedTile.id) {
-            return { ...tile, isMatched: true, isSelected: false, isFree: false };
-          }
-
-          return tile.isSelected ? { ...tile, isSelected: false } : tile;
-        }),
-      );
-      const nextMatchedPairs = state.matchedPairs + 1;
-      const nextCleared = isBoardCleared(nextTiles);
-      const nextStuck = !nextCleared && isBoardStuck(nextTiles);
-      const timeRemaining = state.timeLimitSeconds ? Math.max(0, state.timeLimitSeconds - state.timeElapsed) : 0;
-
-      const finalScore = nextCleared
-        ? calculateFinalScore(newScore, timeRemaining, state.hintsUsed, state.reshufflesUsed, state.undosUsed, true)
-        : newScore;
-
-      set({
-        tiles: nextTiles,
-        selectedTileId: null,
-        matchedPairs: nextMatchedPairs,
-        isLevelComplete: nextCleared,
-        isBoardStuck: nextStuck,
-        moves: state.moves + 1,
-        undoStack: [...state.undoStack, { tileIds: [selectedTile.id, tappedTile.id] }],
-        hintPairIds: null,
-        blockedTileId: null,
-        mismatchTileIds: [],
-        highlightedTileIds: [],
-        lastMatchTimestamp: now,
-        comboCount: newComboCount,
-        comboMultiplier: newMultiplier,
-        score: newScore,
-        finalScore,
-        isTimerRunning: !nextCleared,
-      });
-
-      void (async () => {
-        await playSfx(newComboCount >= 3 ? 'combo' : 'tile_match');
-        await hapticTileMatch();
-
-        if (nextCleared) {
-          await playSfx('level_complete');
-          await hapticLevelComplete();
-        } else if (nextStuck) {
-          await playSfx('board_stuck');
-          await hapticBoardStuck();
-        }
-      })();
-
-      return;
+      handleMatch(set, state, selectedTile, tappedTile);
+    } else {
+      handleMismatch(set, get, state, selectedTile, tappedTile);
     }
-
-    // ── MISMATCH ──────────────────────────────────────────────────────────
-    const nextHearts = state.hearts - 1;
-    const isGameOver = nextHearts <= 0;
-
-    set({
-      tiles: setSelectedTile(state.tiles, null),
-      selectedTileId: null,
-      mismatchTileIds: [selectedTile.id, tappedTile.id],
-      blockedTileId: null,
-      highlightedTileIds: [],
-      hearts: nextHearts,
-      isGameOver,
-      isTimerRunning: !isGameOver,
-      // Mismatch resets combo
-      comboCount: 0,
-      comboMultiplier: 1.0,
-    });
-
-    void playSfx('tile_no_match');
-    void hapticNoMatch();
-    if (mismatchClearTimeout) {
-      clearTimeout(mismatchClearTimeout);
-    }
-    mismatchClearTimeout = setTimeout(() => {
-      if (get().selectedTileId === null) {
-        set({ mismatchTileIds: [] });
-      }
-      mismatchClearTimeout = null;
-    }, 420);
   },
 
   useHint: () => {
