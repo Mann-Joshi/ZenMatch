@@ -1,7 +1,7 @@
 import { computeFreeTiles, findAvailablePairs, getTileGroup, type Tile } from '@/game/mahjongLogic';
 import { shuffleArray, type SeedInput } from '@/utils/random';
 
-export function shuffleBoard(tiles: Tile[], seed: SeedInput): Tile[] {
+export function shuffleBoard(tiles: Tile[], seed?: SeedInput): Tile[] {
   const activeTiles = tiles.filter((tile) => !tile.isMatched);
   if (activeTiles.length < 2) {
     return computeFreeTiles(tiles);
@@ -12,7 +12,8 @@ export function shuffleBoard(tiles: Tile[], seed: SeedInput): Tile[] {
   let candidateTiles = computeFreeTiles(tiles);
 
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    const shuffledTypes = shuffleArray(tileTypes, `${seed}-${attempt}`);
+    const shuffleSeed = seed !== undefined ? `${seed}-${attempt}` : undefined;
+    const shuffledTypes = shuffleArray(tileTypes, shuffleSeed);
     let typeIndex = 0;
 
     const shuffledBoard = tiles.map((tile) => {

@@ -464,7 +464,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       return;
     }
 
-    const shuffledTiles = shuffleBoard(state.tiles, `${state.currentSeed}-${state.reshufflesUsed + 1}`);
+    // In-game shuffles use secure non-deterministic randomness.
+    const shuffledTiles = shuffleBoard(state.tiles);
     set({
       tiles: shuffledTiles,
       selectedTileId: null,
