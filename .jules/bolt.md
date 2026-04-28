@@ -1,0 +1,3 @@
+## 2024-05-18 - [Unified Blocker Check in Mahjong Logic]
+**Learning:** Mahjong board freeness logic (`computeFreeTiles`) originally allocated intermediate arrays for candidate tiles and searched multiple times for blockages from top, left, and right directions independently. This redundant array spread syntax and traversal caused heavy GC and CPU overhead in the tight game loops.
+**Action:** When validating game state layouts recursively (like `findAvailablePairs`), always implement an allocation-free algorithm. Group spatial checks into a single pass that updates multiple condition flags (like checking all directions at once) instead of separating them out logically.
