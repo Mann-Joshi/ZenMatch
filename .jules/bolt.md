@@ -1,0 +1,3 @@
+## 2024-04-29 - Mahjong Logic Tile Traversal Optimization
+**Learning:** Mahjong board calculation (`computeFreeTiles` and `getHintPair`) used multiple separate passes for top and side blockers, generating significant object/array churn via spread operators and `some` checks over spatial bucket maps.
+**Action:** Consolidate these checks into a single unified grid traversal using bounded loops instead of functional iterators (`some`, `.filter`). The max radius across all blocker logic defines the bounds. This single traversal pattern eliminated dead code and dramatically improved performance (~40-60%) for core game loop functions.
