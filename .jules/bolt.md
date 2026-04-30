@@ -1,0 +1,3 @@
+## 2024-05-17 - [Unified Grid Traversal for Blockers]
+**Learning:** Checking Mahjong tile freeness originally relied on separate multi-directional traversals via `getNearbyTiles` and checking `hasTopBlocker`/`hasSideBlocker` independently. This created intermediate array allocations (via `candidates.push(...bucket)`) and duplicate grid lookups for adjacent tile cells per check.
+**Action:** When performing proximity/overlap checks in heavily repeated paths like `computeFreeTiles` or `getHintPair`, compute all blocker logic (above, left, right) in a single grid traversal pass accessing the tile bucket maps directly. This avoids array allocations and reduces loop overhead significantly.
