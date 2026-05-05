@@ -70,6 +70,64 @@ function buildTileBuckets(tiles: Tile[]): TileBuckets {
   return buckets;
 }
 
+const Y_STEPS = Math.ceil(SIDE_OVERLAP_ROW * POSITION_SCALE);
+const X_STEPS = Math.ceil(SIDE_OVERLAP_COL * POSITION_SCALE);
+
+function checkIsFree(tile: Tile, buckets: TileBuckets): boolean {
+  let blockedLeft = false;
+  let blockedRight = false;
+
+  const center = getScaledPosition(tile);
+
+  for (let y = center.y - Y_STEPS; y <= center.y + Y_STEPS; y++) {
+    for (let x = center.x - X_STEPS; x <= center.x + X_STEPS; x++) {
+      const bucket = buckets.get(`${y}:${x}`);
+      if (!bucket) continue;
+
+      for (let i = 0; i < bucket.length; i++) {
+        const candidate = bucket[i];
+
+        if (candidate.id === tile.id) {
+          continue;
+        }
+
+        // Only active tiles can block
+        if (!isTileActive(candidate)) {
+          continue;
+        }
+
+        if (candidate.z > tile.z) {
+          const rowOverlap = Math.abs(candidate.y - tile.y) <= TOP_OVERLAP_ROW;
+          const colOverlap = Math.abs(candidate.x - tile.x) <= TOP_OVERLAP_COL;
+          if (rowOverlap && colOverlap) {
+            return false; // blocked above
+          }
+        }
+
+        if (candidate.z === tile.z) {
+          const rowOverlap = Math.abs(candidate.y - tile.y) <= SIDE_OVERLAP_ROW;
+          if (rowOverlap) {
+            const columnDistance = candidate.x - tile.x;
+            const absColDist = Math.abs(columnDistance);
+
+            if (columnDistance < -SIDE_EPSILON && absColDist <= SIDE_OVERLAP_COL) {
+              blockedLeft = true;
+            } else if (columnDistance > SIDE_EPSILON && absColDist <= SIDE_OVERLAP_COL) {
+              blockedRight = true;
+            }
+
+            if (blockedLeft && blockedRight) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return !(blockedLeft && blockedRight);
+}
+
 function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, colRadius: number): Tile[] {
   const center = getScaledPosition(tile);
   const ySteps = Math.ceil(rowRadius * POSITION_SCALE);
@@ -120,23 +178,16 @@ export function computeFreeTiles(tiles: Tile[]): Tile[] {
       if (!tile.isFree && !tile.isSelected) {
         return tile;
       }
-
       return { ...tile, isFree: false, isSelected: false };
     }
 
-    const blockedAbove = hasTopBlocker(tile, buckets);
-    const blockedLeft = hasSideBlocker(tile, buckets, 'left');
-    const blockedRight = hasSideBlocker(tile, buckets, 'right');
-    const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
+    const isFree = checkIsFree(tile, buckets);
 
     if (tile.isFree === isFree) {
       return tile;
     }
 
-    return {
-      ...tile,
-      isFree,
-    };
+    return { ...tile, isFree };
   });
 }
 
@@ -273,10 +324,7 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
     for (const tile of candidatesToCheck) {
       if (tile.isFree) nextFreeTilesCount--;
 
-      const blockedAbove = hasTopBlocker(tile, initialBuckets);
-      const blockedLeft = hasSideBlocker(tile, initialBuckets, 'left');
-      const blockedRight = hasSideBlocker(tile, initialBuckets, 'right');
-      const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
+      const isFree = checkIsFree(tile, initialBuckets);
 
       if (isFree) nextFreeTilesCount++;
     }
