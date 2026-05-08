@@ -220,8 +220,10 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
   let bestPair: [string, string] | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
 
+  const tileById: Record<string, Tile> = {};
   let freeActiveTilesCount = 0;
   for (let i = 0; i < computedTiles.length; i++) {
+    tileById[computedTiles[i].id] = computedTiles[i];
     if (computedTiles[i].isFree && !computedTiles[i].isMatched) {
       freeActiveTilesCount++;
     }
@@ -232,12 +234,8 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
   for (let p = 0; p < pairsFound.length; p++) {
     const pair = pairsFound[p];
 
-    let t1: Tile | undefined;
-    let t2: Tile | undefined;
-    for (let i = 0; i < computedTiles.length; i++) {
-      if (computedTiles[i].id === pair[0]) t1 = computedTiles[i];
-      if (computedTiles[i].id === pair[1]) t2 = computedTiles[i];
-    }
+    const t1 = tileById[pair[0]];
+    const t2 = tileById[pair[1]];
 
     if (!t1 || !t2) continue;
 
