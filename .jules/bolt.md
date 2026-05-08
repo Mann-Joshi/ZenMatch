@@ -1,0 +1,3 @@
+## 2024-05-30 - Map vs Record Lookup Performance in Mahjong Hint Generation
+**Learning:** In V8/Node for string-keyed map lookups, a plain object (`Record<string, Tile>`) outperforms a `Map<string, Tile>` significantly in tight loops. When optimizing `getHintPair` in `src/game/mahjongLogic.ts`, moving from an O(N) array search to `Record` brought the benchmark from ~3000ms down to ~1680ms, whereas `Map` was around ~1790ms.
+**Action:** Default to `Record<string, T>` over `Map` for simple, string-keyed ID lookups inside heavily executed functions in this codebase unless Map-specific features are explicitly needed.
