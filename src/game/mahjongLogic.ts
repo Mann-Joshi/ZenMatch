@@ -221,8 +221,14 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
   let bestScore = Number.NEGATIVE_INFINITY;
 
   let freeActiveTilesCount = 0;
+
+  // ⚡ Bolt Optimization: Precompute O(1) map for tile lookups instead of O(N) array scan.
+  // Impact: Reduces time complexity of pair lookup from O(P * N) to O(P + N), where P is number of pairs and N is number of tiles.
+  const computedTilesById: Record<string, Tile> = {};
   for (let i = 0; i < computedTiles.length; i++) {
-    if (computedTiles[i].isFree && !computedTiles[i].isMatched) {
+    const tile = computedTiles[i];
+    computedTilesById[tile.id] = tile;
+    if (tile.isFree && !tile.isMatched) {
       freeActiveTilesCount++;
     }
   }
@@ -232,12 +238,8 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
   for (let p = 0; p < pairsFound.length; p++) {
     const pair = pairsFound[p];
 
-    let t1: Tile | undefined;
-    let t2: Tile | undefined;
-    for (let i = 0; i < computedTiles.length; i++) {
-      if (computedTiles[i].id === pair[0]) t1 = computedTiles[i];
-      if (computedTiles[i].id === pair[1]) t2 = computedTiles[i];
-    }
+    const t1 = computedTilesById[pair[0]];
+    const t2 = computedTilesById[pair[1]];
 
     if (!t1 || !t2) continue;
 
