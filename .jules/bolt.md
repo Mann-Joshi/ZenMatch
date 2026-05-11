@@ -1,0 +1,3 @@
+## 2024-05-11 - [MahjongLogic: Unified Blocker Checks]
+**Learning:** In heavily accessed functions like `computeFreeTiles`, sequentially checking multiple conditions (e.g., top, left, right blockers) by generating intermediate `candidates` arrays via multi-directional grid scans incurs significant garbage collection and processing overhead.
+**Action:** Consolidate multiple spatial queries into a single, unified grid traversal that checks all required conditions simultaneously. Also, be careful to preserve the exact logical checks (e.g., strict absolute coordinate equality for top blockers) instead of erroneously adapting them.
