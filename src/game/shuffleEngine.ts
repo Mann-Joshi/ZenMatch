@@ -2,12 +2,21 @@ import { computeFreeTiles, findAvailablePairs, getTileGroup, type Tile } from '@
 import { shuffleArray, type SeedInput } from '@/utils/random';
 
 export function shuffleBoard(tiles: Tile[], seed?: SeedInput): Tile[] {
-  const activeTiles = tiles.filter((tile) => !tile.isMatched);
+  const activeTiles: Tile[] = [];
+  const tileTypes: string[] = [];
+
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+    if (!tile.isMatched) {
+      activeTiles.push(tile);
+      tileTypes.push(tile.tileType);
+    }
+  }
+
   if (activeTiles.length < 2) {
     return computeFreeTiles(tiles);
   }
 
-  const tileTypes = activeTiles.map((tile) => tile.tileType);
   // Start with original board as the fallback candidate
   let candidateTiles = computeFreeTiles(tiles);
 

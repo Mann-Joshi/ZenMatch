@@ -1,0 +1,3 @@
+## 2024-05-16 - Eliminate Chained Array Operations in Hot Paths
+**Learning:** In heavily executed paths like component render cycles (`TileBoard.tsx`) and game state loops (`computeHighlightedIds`, `findAvailablePairs`, `shuffleBoard`), chaining array methods like `.map().filter()` or `.filter().filter().map()` causes unnecessary multiple iterations and intermediate array allocations.
+**Action:** Replace chained array operations with a single `for` loop or `.reduce()` to iterate through the data once and populate the final arrays directly. This reduces memory pressure from temporary allocations and speeds up execution.

@@ -105,10 +105,16 @@ export const TileBoard = memo(function TileBoard({
     [layoutKey],
   );
 
-  const orderedTiles = useMemo(
-    () => orderedTileIds.map((tileId) => tileById[tileId]).filter(Boolean),
-    [orderedTileIds, tileById],
-  );
+  const orderedTiles = useMemo(() => {
+    const tilesArray: Tile[] = [];
+    for (let i = 0; i < orderedTileIds.length; i++) {
+      const tile = tileById[orderedTileIds[i]];
+      if (tile) {
+        tilesArray.push(tile);
+      }
+    }
+    return tilesArray;
+  }, [orderedTileIds, tileById]);
 
   const metrics = useMemo(
     () => buildBoardMetrics(orderedTiles, width, height),
