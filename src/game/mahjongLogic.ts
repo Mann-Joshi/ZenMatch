@@ -160,12 +160,15 @@ export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
 }
 
 export function findAvailablePairs(tiles: Tile[]): [string, string][] {
-  const computedTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched);
+  const computedTiles = computeFreeTiles(tiles);
   const pairs: [string, string][] = [];
 
   const buckets = new Map<string, Tile[]>();
 
   for (const tile of computedTiles) {
+    if (!tile.isFree || tile.isMatched) {
+      continue;
+    }
     const group = tile.group ?? getTileGroup(tile.symbolKey ?? tile.tileType);
     let key: string;
 
