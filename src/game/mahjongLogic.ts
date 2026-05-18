@@ -115,13 +115,19 @@ function hasSideBlocker(tile: Tile, buckets: TileBuckets, direction: 'left' | 'r
 export function computeFreeTiles(tiles: Tile[]): Tile[] {
   const buckets = buildTileBuckets(tiles);
 
-  return tiles.map((tile) => {
+  // ⚡ Bolt: Avoid Array.map overhead in hot path by using a pre-allocated array and for loop
+  const result = new Array<Tile>(tiles.length);
+
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+
     if (tile.isMatched) {
       if (!tile.isFree && !tile.isSelected) {
-        return tile;
+        result[i] = tile;
+      } else {
+        result[i] = { ...tile, isFree: false, isSelected: false };
       }
-
-      return { ...tile, isFree: false, isSelected: false };
+      continue;
     }
 
     const blockedAbove = hasTopBlocker(tile, buckets);
@@ -130,14 +136,13 @@ export function computeFreeTiles(tiles: Tile[]): Tile[] {
     const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
 
     if (tile.isFree === isFree) {
-      return tile;
+      result[i] = tile;
+    } else {
+      result[i] = { ...tile, isFree };
     }
+  }
 
-    return {
-      ...tile,
-      isFree,
-    };
-  });
+  return result;
 }
 
 export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
