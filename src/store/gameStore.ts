@@ -112,10 +112,15 @@ function setSelectedTile(tiles: Tile[], tileId: string | null): Tile[] {
 
 /** Returns tile IDs of all free tiles whose type matches the given tile (excluding itself). */
 function computeHighlightedIds(tiles: Tile[], selectedTile: Tile): string[] {
-  const freeTiles = tiles.filter((t) => t.isFree && !t.isMatched && t.id !== selectedTile.id);
-  return freeTiles
-    .filter((t) => areTilesMatching(selectedTile, t))
-    .map((t) => t.id);
+  // ⚡ Bolt: Consolidated chained .filter().map() into a single for loop for performance
+  const result: string[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    if (t.isFree && !t.isMatched && t.id !== selectedTile.id && areTilesMatching(selectedTile, t)) {
+      result.push(t.id);
+    }
+  }
+  return result;
 }
 
 
