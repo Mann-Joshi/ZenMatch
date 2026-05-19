@@ -80,7 +80,9 @@ function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, col
     for (let x = center.x - xSteps; x <= center.x + xSteps; x += 1) {
       const bucket = buckets.get(`${y}:${x}`);
       if (bucket) {
-        candidates.push(...bucket);
+        for (let i = 0; i < bucket.length; i++) {
+          candidates.push(bucket[i]);
+        }
       }
     }
   }
@@ -114,14 +116,18 @@ function hasSideBlocker(tile: Tile, buckets: TileBuckets, direction: 'left' | 'r
 
 export function computeFreeTiles(tiles: Tile[]): Tile[] {
   const buckets = buildTileBuckets(tiles);
+  const result = new Array(tiles.length);
 
-  return tiles.map((tile) => {
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+
     if (tile.isMatched) {
       if (!tile.isFree && !tile.isSelected) {
-        return tile;
+        result[i] = tile;
+      } else {
+        result[i] = { ...tile, isFree: false, isSelected: false };
       }
-
-      return { ...tile, isFree: false, isSelected: false };
+      continue;
     }
 
     const blockedAbove = hasTopBlocker(tile, buckets);
@@ -130,14 +136,13 @@ export function computeFreeTiles(tiles: Tile[]): Tile[] {
     const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
 
     if (tile.isFree === isFree) {
-      return tile;
+      result[i] = tile;
+    } else {
+      result[i] = { ...tile, isFree };
     }
+  }
 
-    return {
-      ...tile,
-      isFree,
-    };
-  });
+  return result;
 }
 
 export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
@@ -160,12 +165,17 @@ export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
 }
 
 export function findAvailablePairs(tiles: Tile[]): [string, string][] {
-  const computedTiles = computeFreeTiles(tiles).filter((tile) => tile.isFree && !tile.isMatched);
+  const computedTiles = computeFreeTiles(tiles);
   const pairs: [string, string][] = [];
 
   const buckets = new Map<string, Tile[]>();
 
-  for (const tile of computedTiles) {
+  for (let i = 0; i < computedTiles.length; i++) {
+    const tile = computedTiles[i];
+    if (!tile.isFree || tile.isMatched) {
+      continue;
+    }
+
     const group = tile.group ?? getTileGroup(tile.symbolKey ?? tile.tileType);
     let key: string;
 
