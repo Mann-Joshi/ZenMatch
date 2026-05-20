@@ -88,56 +88,79 @@ function getNearbyTiles(tile: Tile, buckets: TileBuckets, rowRadius: number, col
   return candidates;
 }
 
-function hasTopBlocker(tile: Tile, buckets: TileBuckets): boolean {
-  return getNearbyTiles(tile, buckets, 0, 0).some(
-    (candidate) =>
-      candidate.id !== tile.id &&
-      candidate.z > tile.z &&
-      candidate.x === tile.x &&
-      candidate.y === tile.y,
-  );
-}
+function getBlockerStatus(tile: Tile, buckets: TileBuckets): { blockedAbove: boolean; blockedLeft: boolean; blockedRight: boolean } {
+  const center = getScaledPosition(tile);
+  let blockedAbove = false;
+  let blockedLeft = false;
+  let blockedRight = false;
 
-function hasSideBlocker(tile: Tile, buckets: TileBuckets, direction: 'left' | 'right'): boolean {
-  return getNearbyTiles(tile, buckets, SIDE_OVERLAP_ROW, SIDE_OVERLAP_COL).some((candidate) => {
-    if (candidate.id === tile.id || !isTileActive(candidate) || candidate.z !== tile.z) {
-      return false;
+  const rowRadius = SIDE_OVERLAP_ROW;
+  const colRadius = SIDE_OVERLAP_COL;
+  const ySteps = Math.ceil(rowRadius * POSITION_SCALE);
+  const xSteps = Math.ceil(colRadius * POSITION_SCALE);
+
+  for (let y = center.y - ySteps; y <= center.y + ySteps; y += 1) {
+    for (let x = center.x - xSteps; x <= center.x + xSteps; x += 1) {
+      const bucket = buckets.get(`${y}:${x}`);
+      if (!bucket) continue;
+
+      for (let j = 0; j < bucket.length; j++) {
+        const candidate = bucket[j];
+
+        if (candidate.id === tile.id || !isTileActive(candidate)) {
+          continue;
+        }
+
+        if (!blockedAbove && candidate.z > tile.z && candidate.x === tile.x && candidate.y === tile.y) {
+          blockedAbove = true;
+        }
+
+        if (candidate.z === tile.z) {
+          const rowOverlap = Math.abs(candidate.y - tile.y) <= SIDE_OVERLAP_ROW;
+          if (rowOverlap) {
+            const columnDistance = candidate.x - tile.x;
+            if (!blockedLeft && columnDistance < -SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL) {
+              blockedLeft = true;
+            }
+            if (!blockedRight && columnDistance > SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL) {
+              blockedRight = true;
+            }
+          }
+        }
+      }
     }
+  }
 
-    const rowOverlap = Math.abs(candidate.y - tile.y) <= SIDE_OVERLAP_ROW;
-    const columnDistance = candidate.x - tile.x;
-    const blocksLeft = direction === 'left' && columnDistance < -SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL;
-    const blocksRight = direction === 'right' && columnDistance > SIDE_EPSILON && Math.abs(columnDistance) <= SIDE_OVERLAP_COL;
-    return rowOverlap && (blocksLeft || blocksRight);
-  });
+  return { blockedAbove, blockedLeft, blockedRight };
 }
 
 export function computeFreeTiles(tiles: Tile[]): Tile[] {
   const buckets = buildTileBuckets(tiles);
+  const result = new Array(tiles.length);
 
-  return tiles.map((tile) => {
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+
     if (tile.isMatched) {
       if (!tile.isFree && !tile.isSelected) {
-        return tile;
+        result[i] = tile;
+      } else {
+        result[i] = { ...tile, isFree: false, isSelected: false };
       }
-
-      return { ...tile, isFree: false, isSelected: false };
+      continue;
     }
 
-    const blockedAbove = hasTopBlocker(tile, buckets);
-    const blockedLeft = hasSideBlocker(tile, buckets, 'left');
-    const blockedRight = hasSideBlocker(tile, buckets, 'right');
+    const { blockedAbove, blockedLeft, blockedRight } = getBlockerStatus(tile, buckets);
     const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
 
     if (tile.isFree === isFree) {
-      return tile;
+      result[i] = tile;
+    } else {
+      result[i] = { ...tile, isFree };
     }
+  }
 
-    return {
-      ...tile,
-      isFree,
-    };
-  });
+  return result;
 }
 
 export function areTilesMatching(tileA: Tile, tileB: Tile): boolean {
@@ -273,9 +296,7 @@ export function getHintPair(tiles: Tile[]): [string, string] | null {
     for (const tile of candidatesToCheck) {
       if (tile.isFree) nextFreeTilesCount--;
 
-      const blockedAbove = hasTopBlocker(tile, initialBuckets);
-      const blockedLeft = hasSideBlocker(tile, initialBuckets, 'left');
-      const blockedRight = hasSideBlocker(tile, initialBuckets, 'right');
+      const { blockedAbove, blockedLeft, blockedRight } = getBlockerStatus(tile, initialBuckets);
       const isFree = !blockedAbove && (!blockedLeft || !blockedRight);
 
       if (isFree) nextFreeTilesCount++;
